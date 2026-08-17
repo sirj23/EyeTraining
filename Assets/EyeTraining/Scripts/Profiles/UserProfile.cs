@@ -5,8 +5,13 @@ namespace EyeTraining.Profiles
     public sealed class UserProfile
     {
         public UserProfile(string displayName, ProfileCategory category)
+            : this(Guid.NewGuid().ToString("N"), displayName, category)
         {
-            Id = Guid.NewGuid().ToString("N");
+        }
+
+        public UserProfile(string id, string displayName, ProfileCategory category)
+        {
+            Id = id;
             DisplayName = displayName;
             Category = category;
         }
