@@ -13,6 +13,7 @@ namespace EyeTraining.UI
         [SerializeField] private Button voiceModeButton;
         [SerializeField] private Button textModeButton;
         [SerializeField] private Button backButton;
+        [SerializeField] private PreparationController preparationController;
 
         public SessionGuidanceMode? SelectedMode { get; private set; }
 
@@ -44,13 +45,13 @@ namespace EyeTraining.UI
         private void SelectVoiceMode()
         {
             SelectedMode = SessionGuidanceMode.Voice;
-            Debug.Log("Wybrano tryb prowadzenia sesji: Voice.");
+            preparationController.Begin(SelectedMode.Value);
         }
 
         private void SelectTextMode()
         {
             SelectedMode = SessionGuidanceMode.Text;
-            Debug.Log("Wybrano tryb prowadzenia sesji: Text.");
+            preparationController.Begin(SelectedMode.Value);
         }
 
         private void ReturnHome()
