@@ -9,10 +9,7 @@ namespace EyeTraining.Exercises
     public sealed class HorizontalTrackingController : MonoBehaviour
     {
         private const float ExerciseDurationSeconds = 15f;
-        private const float HorizontalViewportMargin = 0.12f;
-        private const float TargetViewportY = 0.48f;
         private const float TargetViewportHeight = 76f / 1080f;
-        private const float TargetViewportSpeed = 220f / 1920f;
 
         [SerializeField] private GameObject homeScreen;
         [SerializeField] private GameObject exerciseScreen;
@@ -25,6 +22,8 @@ namespace EyeTraining.Exercises
         [SerializeField] private Button interruptButton;
         [SerializeField] private Button nextButton;
         [SerializeField] private Button startTrainingButton;
+
+        private readonly ITrackingPath trackingPath = new HorizontalTrackingPath();
         private float remainingTime;
         private double movementStartTime;
         private bool isRunning;
@@ -89,12 +88,11 @@ namespace EyeTraining.Exercises
 
         private void UpdateTargetPosition()
         {
-            GetHorizontalViewportLimits(out float leftLimit, out float rightLimit);
-            float travelDistance = rightLimit - leftLimit;
             double elapsedTime = Time.timeAsDouble - movementStartTime;
-            float viewportX = leftLimit
-                + Mathf.PingPong((float)(elapsedTime * TargetViewportSpeed), travelDistance);
-            target.position = ViewportToTargetPlane(viewportX, TargetViewportY);
+            Vector2 viewportPosition = trackingPath.Evaluate(
+                elapsedTime,
+                GetTargetExtentsInViewport());
+            target.position = ViewportToTargetPlane(viewportPosition);
         }
 
         private void Complete()
@@ -123,8 +121,10 @@ namespace EyeTraining.Exercises
 
         private void ResetTargetPosition()
         {
-            GetHorizontalViewportLimits(out float leftLimit, out _);
-            target.position = ViewportToTargetPlane(leftLimit, TargetViewportY);
+            Vector2 viewportPosition = trackingPath.Evaluate(
+                0d,
+                GetTargetExtentsInViewport());
+            target.position = ViewportToTargetPlane(viewportPosition);
         }
 
         private void ConfigureTargetScale()
@@ -136,20 +136,23 @@ namespace EyeTraining.Exercises
             target.localScale = Vector3.one * uniformScale;
         }
 
-        private void GetHorizontalViewportLimits(out float leftLimit, out float rightLimit)
+        private Vector2 GetTargetExtentsInViewport()
         {
-            float visibleWorldWidth = ViewportToTargetPlane(1f, TargetViewportY).x
-                - ViewportToTargetPlane(0f, TargetViewportY).x;
-            float targetRadiusInViewport = targetRenderer.bounds.extents.x / visibleWorldWidth;
-            leftLimit = HorizontalViewportMargin + targetRadiusInViewport;
-            rightLimit = 1f - HorizontalViewportMargin - targetRadiusInViewport;
+            Vector3 viewportMin = ViewportToTargetPlane(Vector2.zero);
+            Vector3 viewportMax = ViewportToTargetPlane(Vector2.one);
+            float visibleWorldWidth = viewportMax.x - viewportMin.x;
+            float visibleWorldHeight = viewportMax.y - viewportMin.y;
+
+            return new Vector2(
+                targetRenderer.bounds.extents.x / visibleWorldWidth,
+                targetRenderer.bounds.extents.y / visibleWorldHeight);
         }
 
-        private Vector3 ViewportToTargetPlane(float viewportX, float viewportY)
+        private Vector3 ViewportToTargetPlane(Vector2 viewportPosition)
         {
             float distanceFromCamera = target.position.z - exerciseCamera.transform.position.z;
             Vector3 position = exerciseCamera.ViewportToWorldPoint(
-                new Vector3(viewportX, viewportY, distanceFromCamera));
+                new Vector3(viewportPosition.x, viewportPosition.y, distanceFromCamera));
             position.z = target.position.z;
             return position;
         }
