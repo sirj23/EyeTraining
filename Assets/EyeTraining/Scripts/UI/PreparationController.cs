@@ -3,6 +3,7 @@ using EyeTraining.Exercises;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace EyeTraining.UI
@@ -25,7 +26,8 @@ namespace EyeTraining.UI
         [SerializeField] private Button nextButton;
         [SerializeField] private Button backButton;
         [SerializeField] private Button defaultModeButton;
-        [SerializeField] private HorizontalTrackingController horizontalTrackingController;
+        [FormerlySerializedAs("horizontalTrackingController")]
+        [SerializeField] private TrackingExerciseController trackingExerciseController;
 
         private int currentStepIndex;
 
@@ -64,7 +66,7 @@ namespace EyeTraining.UI
             }
 
             preparationScreen.SetActive(false);
-            horizontalTrackingController.Begin(GuidanceMode);
+            trackingExerciseController.Begin(GuidanceMode);
         }
 
         private void GoBack()

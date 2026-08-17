@@ -496,7 +496,7 @@ MonoBehaviour:
   nextButton: {fileID: 1077361730}
   backButton: {fileID: 1011168820}
   defaultModeButton: {fileID: 325943992}
-  horizontalTrackingController: {fileID: 200006}
+  trackingExerciseController: {fileID: 200006}
 --- !u!114 &200006
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -508,13 +508,15 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ebe41326bce44d96aa3dc12009f95747, type: 3}
   m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::EyeTraining.Exercises.HorizontalTrackingController
+  m_EditorClassIdentifier: Assembly-CSharp::EyeTraining.Exercises.TrackingExerciseController
   homeScreen: {fileID: 1535237442}
   exerciseScreen: {fileID: 1601454828}
   exerciseWorld: {fileID: 73995430}
   exerciseCamera: {fileID: 100003}
   target: {fileID: 1259418285}
   targetRenderer: {fileID: 1259418286}
+  pathType: 0
+  titleText: {fileID: 816859648}
   timerText: {fileID: 206696323}
   completionMessage: {fileID: 251521973}
   interruptButton: {fileID: 771989337}

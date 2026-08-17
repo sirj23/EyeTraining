@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 namespace EyeTraining.Exercises
 {
-    public sealed class HorizontalTrackingController : MonoBehaviour
+    public sealed class TrackingExerciseController : MonoBehaviour
     {
         private const float ExerciseDurationSeconds = 15f;
         private const float TargetViewportHeight = 76f / 1080f;
@@ -17,13 +17,15 @@ namespace EyeTraining.Exercises
         [SerializeField] private Camera exerciseCamera;
         [SerializeField] private Transform target;
         [SerializeField] private SpriteRenderer targetRenderer;
+        [SerializeField] private TrackingPathType pathType;
+        [SerializeField] private TMP_Text titleText;
         [SerializeField] private TMP_Text timerText;
         [SerializeField] private GameObject completionMessage;
         [SerializeField] private Button interruptButton;
         [SerializeField] private Button nextButton;
         [SerializeField] private Button startTrainingButton;
 
-        private readonly ITrackingPath trackingPath = new HorizontalTrackingPath();
+        private ITrackingPath trackingPath;
         private float remainingTime;
         private double movementStartTime;
         private bool isRunning;
@@ -32,6 +34,7 @@ namespace EyeTraining.Exercises
 
         private void Awake()
         {
+            trackingPath = CreateTrackingPath();
             interruptButton.onClick.AddListener(Interrupt);
             nextButton.onClick.AddListener(ReturnHome);
             exerciseScreen.SetActive(false);
@@ -79,6 +82,7 @@ namespace EyeTraining.Exercises
             completionMessage.SetActive(false);
             nextButton.gameObject.SetActive(false);
             interruptButton.gameObject.SetActive(true);
+            UpdateTitle();
             ConfigureTargetScale();
             ResetTargetPosition();
             movementStartTime = Time.timeAsDouble;
@@ -93,6 +97,22 @@ namespace EyeTraining.Exercises
                 elapsedTime,
                 GetTargetExtentsInViewport());
             target.position = ViewportToTargetPlane(viewportPosition);
+        }
+
+        private ITrackingPath CreateTrackingPath()
+        {
+            return pathType switch
+            {
+                TrackingPathType.Vertical => new VerticalTrackingPath(),
+                _ => new HorizontalTrackingPath()
+            };
+        }
+
+        private void UpdateTitle()
+        {
+            titleText.text = pathType == TrackingPathType.Vertical
+                ? "Śledzenie pionowe"
+                : "Śledzenie poziome";
         }
 
         private void Complete()
