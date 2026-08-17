@@ -1,4 +1,5 @@
 using EyeTraining.Core;
+using EyeTraining.Exercises;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -24,6 +25,7 @@ namespace EyeTraining.UI
         [SerializeField] private Button nextButton;
         [SerializeField] private Button backButton;
         [SerializeField] private Button defaultModeButton;
+        [SerializeField] private HorizontalTrackingController horizontalTrackingController;
 
         private int currentStepIndex;
 
@@ -61,7 +63,8 @@ namespace EyeTraining.UI
                 return;
             }
 
-            Debug.Log($"Przygotowanie zakończono. Tryb prowadzenia: {GuidanceMode}.");
+            preparationScreen.SetActive(false);
+            horizontalTrackingController.Begin(GuidanceMode);
         }
 
         private void GoBack()
