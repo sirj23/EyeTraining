@@ -10,6 +10,9 @@ namespace EyeTraining.UI
 {
     public sealed class ProfileScreenController : MonoBehaviour
     {
+        private const string PlaceholderRankName = "Pierwsze spojrzenie";
+        private const float PlaceholderRankProgress = 0.15f;
+
         [Header("Ekran wyboru profilu")]
         [SerializeField] private GameObject profileSelectionScreen;
         [SerializeField] private Transform profileTilesContainer;
@@ -28,10 +31,20 @@ namespace EyeTraining.UI
         [SerializeField] private Button createProfileButton;
         [SerializeField] private Button backButton;
 
+        [Header("Ekran główny")]
+        [SerializeField] private GameObject homeScreen;
+        [SerializeField] private TMP_Text homeProfileName;
+        [SerializeField] private TMP_Text homeRankName;
+        [SerializeField] private RectTransform homeRankProgressFill;
+        [SerializeField] private Button startTrainingButton;
+        [SerializeField] private Button changeProfileButton;
+
         private readonly List<GameObject> _generatedProfileTiles = new List<GameObject>();
 
         private IProfileRepository _profileRepository;
         private ProfileCategory? _selectedCategory;
+
+        public UserProfile ActiveProfile { get; private set; }
 
         private void Awake()
         {
@@ -54,6 +67,7 @@ namespace EyeTraining.UI
             seniorButton.onClick.AddListener(SelectSenior);
             createProfileButton.onClick.AddListener(CreateProfile);
             backButton.onClick.AddListener(ShowProfileSelection);
+            changeProfileButton.onClick.AddListener(ShowProfileSelection);
         }
 
         private void UnbindActions()
@@ -65,14 +79,17 @@ namespace EyeTraining.UI
             seniorButton.onClick.RemoveListener(SelectSenior);
             createProfileButton.onClick.RemoveListener(CreateProfile);
             backButton.onClick.RemoveListener(ShowProfileSelection);
+            changeProfileButton.onClick.RemoveListener(ShowProfileSelection);
         }
 
         private void ShowProfileSelection()
         {
+            ActiveProfile = null;
             addProfileScreen.SetActive(false);
+            homeScreen.SetActive(false);
             profileSelectionScreen.SetActive(true);
-            RefreshProfileTiles();
-            Select(addProfileButton.gameObject);
+            Button firstProfileTile = RefreshProfileTiles();
+            Select(firstProfileTile != null ? firstProfileTile.gameObject : addProfileButton.gameObject);
         }
 
         private void ShowAddProfile()
@@ -83,7 +100,7 @@ namespace EyeTraining.UI
             Select(profileNameInput.gameObject);
         }
 
-        private void RefreshProfileTiles()
+        private Button RefreshProfileTiles()
         {
             foreach (GameObject tile in _generatedProfileTiles)
             {
@@ -92,16 +109,39 @@ namespace EyeTraining.UI
 
             _generatedProfileTiles.Clear();
 
+            Button firstProfileTile = null;
             IReadOnlyList<UserProfile> profiles = _profileRepository.GetAll();
             foreach (UserProfile profile in profiles)
             {
                 Button tile = Instantiate(profileTileTemplate, profileTilesContainer);
                 tile.name = $"Profile {profile.Id}";
                 tile.GetComponentInChildren<TMP_Text>(true).text = profile.DisplayName;
+                UserProfile selectedProfile = profile;
+                tile.onClick.AddListener(() => ShowHome(selectedProfile));
                 tile.transform.SetSiblingIndex(addProfileButton.transform.GetSiblingIndex());
                 tile.gameObject.SetActive(true);
                 _generatedProfileTiles.Add(tile.gameObject);
+                firstProfileTile ??= tile;
             }
+
+            return firstProfileTile;
+        }
+
+        private void ShowHome(UserProfile profile)
+        {
+            ActiveProfile = profile;
+            homeProfileName.text = profile.DisplayName;
+
+            // Wartości demonstracyjne UI. Nie są częścią modelu profilu ani systemu XP.
+            homeRankName.text = PlaceholderRankName;
+            Vector2 progressMax = homeRankProgressFill.anchorMax;
+            progressMax.x = PlaceholderRankProgress;
+            homeRankProgressFill.anchorMax = progressMax;
+
+            profileSelectionScreen.SetActive(false);
+            addProfileScreen.SetActive(false);
+            homeScreen.SetActive(true);
+            Select(startTrainingButton.gameObject);
         }
 
         private void CreateProfile()
