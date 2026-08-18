@@ -122,6 +122,8 @@ namespace EyeTraining.Exercises
                 TrackingPathType.VerticalWave => new VerticalWaveTrackingPath(),
                 TrackingPathType.FigureEight => new FigureEightTrackingPath(),
                 TrackingPathType.Spiral => new SpiralTrackingPath(),
+                TrackingPathType.UShape => new UShapeTrackingPath(),
+                TrackingPathType.InvertedUShape => new InvertedUShapeTrackingPath(),
                 _ => new HorizontalTrackingPath()
             };
         }
@@ -149,6 +151,8 @@ namespace EyeTraining.Exercises
                 TrackingPathType.VerticalWave => "Śledzenie po fali pionowej",
                 TrackingPathType.FigureEight => "Śledzenie po ósemce",
                 TrackingPathType.Spiral => "Śledzenie po spirali",
+                TrackingPathType.UShape => "Śledzenie po literze U",
+                TrackingPathType.InvertedUShape => "Śledzenie po odwróconej literze U",
                 _ => "Śledzenie poziome"
             };
         }

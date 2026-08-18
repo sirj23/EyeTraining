@@ -21,6 +21,8 @@ namespace EyeTraining.Exercises
         HorizontalWave,
         VerticalWave,
         FigureEight,
-        Spiral
+        Spiral,
+        UShape,
+        InvertedUShape
     }
 }
