@@ -3,6 +3,8 @@ namespace EyeTraining.Exercises
     public enum TrackingPathType
     {
         Horizontal,
-        Vertical
+        Vertical,
+        DiagonalUp,
+        DiagonalDown
     }
 }

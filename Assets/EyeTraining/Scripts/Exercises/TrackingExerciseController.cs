@@ -104,15 +104,21 @@ namespace EyeTraining.Exercises
             return pathType switch
             {
                 TrackingPathType.Vertical => new VerticalTrackingPath(),
+                TrackingPathType.DiagonalUp => new DiagonalUpTrackingPath(),
+                TrackingPathType.DiagonalDown => new DiagonalDownTrackingPath(),
                 _ => new HorizontalTrackingPath()
             };
         }
 
         private void UpdateTitle()
         {
-            titleText.text = pathType == TrackingPathType.Vertical
-                ? "Śledzenie pionowe"
-                : "Śledzenie poziome";
+            titleText.text = pathType switch
+            {
+                TrackingPathType.Vertical => "Śledzenie pionowe",
+                TrackingPathType.DiagonalUp => "Śledzenie po przekątnej w górę",
+                TrackingPathType.DiagonalDown => "Śledzenie po przekątnej w dół",
+                _ => "Śledzenie poziome"
+            };
         }
 
         private void Complete()
