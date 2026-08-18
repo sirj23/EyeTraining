@@ -19,6 +19,8 @@ namespace EyeTraining.Exercises
         HorizontalZigzag,
         VerticalZigzag,
         HorizontalWave,
-        VerticalWave
+        VerticalWave,
+        FigureEight,
+        Spiral
     }
 }

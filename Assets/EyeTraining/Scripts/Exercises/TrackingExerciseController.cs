@@ -120,6 +120,8 @@ namespace EyeTraining.Exercises
                 TrackingPathType.VerticalZigzag => new VerticalZigzagTrackingPath(),
                 TrackingPathType.HorizontalWave => new HorizontalWaveTrackingPath(),
                 TrackingPathType.VerticalWave => new VerticalWaveTrackingPath(),
+                TrackingPathType.FigureEight => new FigureEightTrackingPath(),
+                TrackingPathType.Spiral => new SpiralTrackingPath(),
                 _ => new HorizontalTrackingPath()
             };
         }
@@ -145,6 +147,8 @@ namespace EyeTraining.Exercises
                 TrackingPathType.VerticalZigzag => "Śledzenie po zygzaku pionowym",
                 TrackingPathType.HorizontalWave => "Śledzenie po fali poziomej",
                 TrackingPathType.VerticalWave => "Śledzenie po fali pionowej",
+                TrackingPathType.FigureEight => "Śledzenie po ósemce",
+                TrackingPathType.Spiral => "Śledzenie po spirali",
                 _ => "Śledzenie poziome"
             };
         }
