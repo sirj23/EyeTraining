@@ -116,6 +116,10 @@ namespace EyeTraining.Exercises
                 TrackingPathType.HorizontalRectangle => new HorizontalRectangleTrackingPath(),
                 TrackingPathType.Triangle => new TriangleTrackingPath(),
                 TrackingPathType.Diamond => new DiamondTrackingPath(),
+                TrackingPathType.HorizontalZigzag => new HorizontalZigzagTrackingPath(),
+                TrackingPathType.VerticalZigzag => new VerticalZigzagTrackingPath(),
+                TrackingPathType.HorizontalWave => new HorizontalWaveTrackingPath(),
+                TrackingPathType.VerticalWave => new VerticalWaveTrackingPath(),
                 _ => new HorizontalTrackingPath()
             };
         }
@@ -137,6 +141,10 @@ namespace EyeTraining.Exercises
                 TrackingPathType.HorizontalRectangle => "Śledzenie po prostokącie",
                 TrackingPathType.Triangle => "Śledzenie po trójkącie",
                 TrackingPathType.Diamond => "Śledzenie po diamencie",
+                TrackingPathType.HorizontalZigzag => "Śledzenie po zygzaku poziomym",
+                TrackingPathType.VerticalZigzag => "Śledzenie po zygzaku pionowym",
+                TrackingPathType.HorizontalWave => "Śledzenie po fali poziomej",
+                TrackingPathType.VerticalWave => "Śledzenie po fali pionowej",
                 _ => "Śledzenie poziome"
             };
         }

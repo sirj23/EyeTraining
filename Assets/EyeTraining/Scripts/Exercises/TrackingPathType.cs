@@ -15,6 +15,10 @@ namespace EyeTraining.Exercises
         Square,
         HorizontalRectangle,
         Triangle,
-        Diamond
+        Diamond,
+        HorizontalZigzag,
+        VerticalZigzag,
+        HorizontalWave,
+        VerticalWave
     }
 }
