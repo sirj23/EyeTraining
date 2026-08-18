@@ -13,6 +13,8 @@ namespace EyeTraining.Exercises
         UpperHorizontalSemiEllipse,
         LowerHorizontalSemiEllipse,
         Square,
-        HorizontalRectangle
+        HorizontalRectangle,
+        Triangle,
+        Diamond
     }
 }
