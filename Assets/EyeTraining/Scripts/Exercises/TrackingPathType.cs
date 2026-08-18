@@ -5,6 +5,7 @@ namespace EyeTraining.Exercises
         Horizontal,
         Vertical,
         DiagonalUp,
-        DiagonalDown
+        DiagonalDown,
+        Circle
     }
 }

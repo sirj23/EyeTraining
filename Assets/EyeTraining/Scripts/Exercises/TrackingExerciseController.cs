@@ -106,6 +106,7 @@ namespace EyeTraining.Exercises
                 TrackingPathType.Vertical => new VerticalTrackingPath(),
                 TrackingPathType.DiagonalUp => new DiagonalUpTrackingPath(),
                 TrackingPathType.DiagonalDown => new DiagonalDownTrackingPath(),
+                TrackingPathType.Circle => new CircleTrackingPath(),
                 _ => new HorizontalTrackingPath()
             };
         }
@@ -117,6 +118,7 @@ namespace EyeTraining.Exercises
                 TrackingPathType.Vertical => "Śledzenie pionowe",
                 TrackingPathType.DiagonalUp => "Śledzenie po przekątnej w górę",
                 TrackingPathType.DiagonalDown => "Śledzenie po przekątnej w dół",
+                TrackingPathType.Circle => "Śledzenie po okręgu",
                 _ => "Śledzenie poziome"
             };
         }
