@@ -107,6 +107,7 @@ namespace EyeTraining.Exercises
                 TrackingPathType.DiagonalUp => new DiagonalUpTrackingPath(),
                 TrackingPathType.DiagonalDown => new DiagonalDownTrackingPath(),
                 TrackingPathType.Circle => new CircleTrackingPath(),
+                TrackingPathType.HorizontalEllipse => new HorizontalEllipseTrackingPath(),
                 _ => new HorizontalTrackingPath()
             };
         }
@@ -119,6 +120,7 @@ namespace EyeTraining.Exercises
                 TrackingPathType.DiagonalUp => "Śledzenie po przekątnej w górę",
                 TrackingPathType.DiagonalDown => "Śledzenie po przekątnej w dół",
                 TrackingPathType.Circle => "Śledzenie po okręgu",
+                TrackingPathType.HorizontalEllipse => "Śledzenie po elipsie",
                 _ => "Śledzenie poziome"
             };
         }
