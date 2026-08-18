@@ -11,6 +11,8 @@ namespace EyeTraining.Exercises
         UpperSemicircle,
         LowerSemicircle,
         UpperHorizontalSemiEllipse,
-        LowerHorizontalSemiEllipse
+        LowerHorizontalSemiEllipse,
+        Square,
+        HorizontalRectangle
     }
 }

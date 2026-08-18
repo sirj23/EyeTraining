@@ -112,6 +112,8 @@ namespace EyeTraining.Exercises
                 TrackingPathType.LowerSemicircle => new LowerSemicircleTrackingPath(),
                 TrackingPathType.UpperHorizontalSemiEllipse => new UpperHorizontalSemiEllipseTrackingPath(),
                 TrackingPathType.LowerHorizontalSemiEllipse => new LowerHorizontalSemiEllipseTrackingPath(),
+                TrackingPathType.Square => new SquareTrackingPath(),
+                TrackingPathType.HorizontalRectangle => new HorizontalRectangleTrackingPath(),
                 _ => new HorizontalTrackingPath()
             };
         }
@@ -129,6 +131,8 @@ namespace EyeTraining.Exercises
                 TrackingPathType.LowerSemicircle => "Śledzenie po dolnym półokręgu",
                 TrackingPathType.UpperHorizontalSemiEllipse => "Śledzenie po górnej półelipsie",
                 TrackingPathType.LowerHorizontalSemiEllipse => "Śledzenie po dolnej półelipsie",
+                TrackingPathType.Square => "Śledzenie po kwadracie",
+                TrackingPathType.HorizontalRectangle => "Śledzenie po prostokącie",
                 _ => "Śledzenie poziome"
             };
         }
