@@ -5,16 +5,12 @@ namespace EyeTraining.Exercises
     public sealed class HorizontalEllipseTrackingPath : ITrackingPath
     {
         private const int ArcLengthSegments = 256;
-        private const float CenterViewportX = 0.5f;
-        private const float CenterViewportY = 0.48f;
-        private const float RadiusXInViewportHeight = 0.32f;
-        private const float RadiusYInViewportHeight = 0.16f;
-        private const float CircleRadiusInViewportHeight = 0.18f;
-        private const float CircleRevolutionDurationSeconds = 10f;
+        private const float HorizontalCoverage = 0.88f;
+        private const float RadiusXInViewportHeight = 0.62f;
+        private const float RadiusYInViewportHeight = 0.19f;
 
         private readonly float[] cumulativeArcLengths;
         private readonly float totalArcLength;
-        private readonly double revolutionDurationSeconds;
 
         public HorizontalEllipseTrackingPath()
         {
@@ -31,24 +27,29 @@ namespace EyeTraining.Exercises
             }
 
             totalArcLength = cumulativeArcLengths[ArcLengthSegments];
-            float circleLinearSpeed =
-                Mathf.PI * 2f * CircleRadiusInViewportHeight /
-                CircleRevolutionDurationSeconds;
-            revolutionDurationSeconds = totalArcLength / circleLinearSpeed;
         }
 
         public Vector2 Evaluate(double elapsedTime, Vector2 targetExtentsInViewport)
         {
             float aspectCorrection = targetExtentsInViewport.x / targetExtentsInViewport.y;
-            float radiusX = RadiusXInViewportHeight * aspectCorrection;
-            double elapsedInRevolution = elapsedTime % revolutionDurationSeconds;
-            float targetArcLength =
-                (float)(elapsedInRevolution / revolutionDurationSeconds) * totalArcLength;
+            float safeScale = GetSafeScale(targetExtentsInViewport, aspectCorrection);
+            float radiusX = RadiusXInViewportHeight * safeScale * aspectCorrection;
+            float fullCycleLength = totalArcLength * safeScale;
+            float traveledDistance =
+                (float)(elapsedTime * TrackingMotionSettings.LinearSpeed % fullCycleLength);
+            float targetArcLength = traveledDistance / safeScale;
             float angle = FindAngleForArcLength(targetArcLength);
-            float viewportX = CenterViewportX + radiusX * Mathf.Sin(angle);
-            float viewportY = CenterViewportY + RadiusYInViewportHeight * Mathf.Cos(angle);
+            float viewportX = TrackingTrainingArea.Center.x + radiusX * Mathf.Sin(angle);
+            float viewportY = TrackingTrainingArea.Center.y
+                + RadiusYInViewportHeight * safeScale * Mathf.Cos(angle);
 
             return new Vector2(viewportX, viewportY);
+        }
+
+        public float GetFullCycleLength(Vector2 targetExtentsInViewport)
+        {
+            float aspectCorrection = targetExtentsInViewport.x / targetExtentsInViewport.y;
+            return totalArcLength * GetSafeScale(targetExtentsInViewport, aspectCorrection);
         }
 
         private float FindAngleForArcLength(float targetArcLength)
@@ -76,6 +77,25 @@ namespace EyeTraining.Exercises
             float samplePosition = lowerIndex + segmentProgress;
 
             return samplePosition * Mathf.PI * 2f / ArcLengthSegments;
+        }
+
+        private static float GetSafeScale(
+            Vector2 targetExtentsInViewport,
+            float aspectCorrection)
+        {
+            float availableHalfWidth =
+                (TrackingTrainingArea.Center.x
+                    - TrackingTrainingArea.GetCenterLeft(targetExtentsInViewport))
+                / aspectCorrection;
+            float horizontalScale =
+                availableHalfWidth * HorizontalCoverage / RadiusXInViewportHeight;
+            float verticalScale = TrackingTrainingArea.GetCenteredShapeScale(
+                targetExtentsInViewport,
+                aspectCorrection,
+                0f,
+                RadiusYInViewportHeight);
+
+            return Mathf.Clamp01(Mathf.Min(horizontalScale, verticalScale));
         }
 
         private static Vector2 EvaluateLocalPoint(float angle)

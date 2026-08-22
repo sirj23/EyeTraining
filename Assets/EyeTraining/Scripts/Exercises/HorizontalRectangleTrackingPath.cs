@@ -4,14 +4,9 @@ namespace EyeTraining.Exercises
 {
     public sealed class HorizontalRectangleTrackingPath : ITrackingPath
     {
-        private const float CenterViewportX = 0.5f;
-        private const float CenterViewportY = 0.48f;
-        private const float HorizontalViewportMargin = 0.12f;
-        private const float BottomViewportLimit = 0.22f;
-        private const float TopViewportLimit = 0.74f;
-        private const float HalfWidthInViewportHeight = 0.32f;
-        private const float HalfHeightInViewportHeight = 0.16f;
-        private const float LinearSpeed = Mathf.PI * 2f * 0.18f / 10f;
+        private const float HorizontalCoverage = 0.88f;
+        private const float HalfWidthInViewportHeight = 0.62f;
+        private const float HalfHeightInViewportHeight = 0.19f;
 
         public Vector2 Evaluate(double elapsedTime, Vector2 targetExtentsInViewport)
         {
@@ -22,12 +17,12 @@ namespace EyeTraining.Exercises
             float width = halfWidth * 2f;
             float height = halfHeight * 2f;
             float perimeter = 2f * (width + height);
-            float traveledDistance = (float)(elapsedTime * LinearSpeed % perimeter);
+            float traveledDistance = (float)(elapsedTime * TrackingMotionSettings.LinearSpeed % perimeter);
             float halfViewportWidth = halfWidth * aspectCorrection;
-            float left = CenterViewportX - halfViewportWidth;
-            float right = CenterViewportX + halfViewportWidth;
-            float top = CenterViewportY + halfHeight;
-            float bottom = CenterViewportY - halfHeight;
+            float left = TrackingTrainingArea.Center.x - halfViewportWidth;
+            float right = TrackingTrainingArea.Center.x + halfViewportWidth;
+            float top = TrackingTrainingArea.Center.y + halfHeight;
+            float bottom = TrackingTrainingArea.Center.y - halfHeight;
 
             if (traveledDistance < width)
             {
@@ -56,20 +51,31 @@ namespace EyeTraining.Exercises
             return new Vector2(left, bottom + traveledDistance);
         }
 
+        public float GetFullCycleLength(Vector2 targetExtentsInViewport)
+        {
+            float aspectCorrection = targetExtentsInViewport.x / targetExtentsInViewport.y;
+            float safeScale = GetSafeScale(targetExtentsInViewport, aspectCorrection);
+            float width = HalfWidthInViewportHeight * safeScale * 2f;
+            float height = HalfHeightInViewportHeight * safeScale * 2f;
+
+            return 2f * (width + height);
+        }
+
         private static float GetSafeScale(
             Vector2 targetExtentsInViewport,
             float aspectCorrection)
         {
-            float horizontalSpace =
-                0.5f - HorizontalViewportMargin - targetExtentsInViewport.x;
-            float bottomSpace =
-                CenterViewportY - BottomViewportLimit - targetExtentsInViewport.y;
-            float topSpace =
-                TopViewportLimit - CenterViewportY - targetExtentsInViewport.y;
+            float availableHalfWidth =
+                (TrackingTrainingArea.Center.x
+                    - TrackingTrainingArea.GetCenterLeft(targetExtentsInViewport))
+                / aspectCorrection;
             float horizontalScale =
-                horizontalSpace / (HalfWidthInViewportHeight * aspectCorrection);
-            float verticalScale =
-                Mathf.Min(bottomSpace, topSpace) / HalfHeightInViewportHeight;
+                availableHalfWidth * HorizontalCoverage / HalfWidthInViewportHeight;
+            float verticalScale = TrackingTrainingArea.GetCenteredShapeScale(
+                targetExtentsInViewport,
+                aspectCorrection,
+                0f,
+                HalfHeightInViewportHeight);
 
             return Mathf.Clamp01(Mathf.Min(horizontalScale, verticalScale));
         }

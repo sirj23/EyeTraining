@@ -2,14 +2,19 @@ using EyeTraining.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Rendering;
 using UnityEngine.UI;
 
 namespace EyeTraining.Exercises
 {
     public sealed class TrackingExerciseController : MonoBehaviour
     {
-        private const float ExerciseDurationSeconds = 15f;
+        private const float CycleCount = 1f;
         private const float TargetViewportHeight = 76f / 1080f;
+        private const float TrainingBoundsLineWidthInViewportHeight = 0.0015f;
+
+        private static readonly Color TrainingBoundsColor =
+            new(0.55f, 0.62f, 0.70f, 0.22f);
 
         [SerializeField] private GameObject homeScreen;
         [SerializeField] private GameObject exerciseScreen;
@@ -25,8 +30,18 @@ namespace EyeTraining.Exercises
         [SerializeField] private Button nextButton;
         [SerializeField] private Button startTrainingButton;
 
+        [Header("Debug")]
+        [SerializeField] private bool showTrainingBounds;
+
         private ITrackingPath trackingPath;
+        private LineRenderer trainingBoundsRenderer;
+        private Vector2 targetExtentsInViewport;
+        private float exerciseDuration;
         private float remainingTime;
+        private float lastBoundsOrthographicSize = -1f;
+        private float lastBoundsTargetPlaneZ = float.NaN;
+        private int lastBoundsPixelWidth = -1;
+        private int lastBoundsPixelHeight = -1;
         private double movementStartTime;
         private bool isRunning;
 
@@ -35,6 +50,7 @@ namespace EyeTraining.Exercises
         private void Awake()
         {
             trackingPath = CreateTrackingPath();
+            CreateTrainingBoundsRenderer();
             interruptButton.onClick.AddListener(Interrupt);
             nextButton.onClick.AddListener(ReturnHome);
             exerciseScreen.SetActive(false);
@@ -54,12 +70,13 @@ namespace EyeTraining.Exercises
                 return;
             }
 
-            remainingTime = Mathf.Max(0f, remainingTime - Time.deltaTime);
+            double elapsedTime = Time.timeAsDouble - movementStartTime;
+            remainingTime = Mathf.Max(0f, exerciseDuration - (float)elapsedTime);
             UpdateTimer();
 
-            if (remainingTime <= 0f)
+            if (elapsedTime >= exerciseDuration)
             {
-                Complete();
+                CompleteAtCycleEnd();
             }
         }
 
@@ -67,15 +84,15 @@ namespace EyeTraining.Exercises
         {
             if (isRunning)
             {
-                UpdateTargetPosition();
+                UpdateTargetPosition(Time.timeAsDouble - movementStartTime);
             }
+
+            UpdateTrainingBounds();
         }
 
         public void Begin(SessionGuidanceMode guidanceMode)
         {
             GuidanceMode = guidanceMode;
-            remainingTime = ExerciseDurationSeconds;
-            isRunning = true;
 
             exerciseScreen.SetActive(true);
             exerciseWorld.SetActive(true);
@@ -84,18 +101,24 @@ namespace EyeTraining.Exercises
             interruptButton.gameObject.SetActive(true);
             UpdateTitle();
             ConfigureTargetScale();
+            targetExtentsInViewport = GetTargetExtentsInViewport();
+            float fullCycleLength = trackingPath.GetFullCycleLength(targetExtentsInViewport);
+            exerciseDuration =
+                fullCycleLength / TrackingMotionSettings.LinearSpeed * CycleCount;
+            remainingTime = exerciseDuration;
             ResetTargetPosition();
             movementStartTime = Time.timeAsDouble;
+            isRunning = true;
             UpdateTimer();
+            UpdateTrainingBounds(true);
             Select(interruptButton.gameObject);
         }
 
-        private void UpdateTargetPosition()
+        private void UpdateTargetPosition(double elapsedTime)
         {
-            double elapsedTime = Time.timeAsDouble - movementStartTime;
             Vector2 viewportPosition = trackingPath.Evaluate(
                 elapsedTime,
-                GetTargetExtentsInViewport());
+                targetExtentsInViewport);
             target.position = ViewportToTargetPlane(viewportPosition);
         }
 
@@ -160,10 +183,24 @@ namespace EyeTraining.Exercises
         private void Complete()
         {
             isRunning = false;
+            trainingBoundsRenderer.enabled = false;
             completionMessage.SetActive(true);
             interruptButton.gameObject.SetActive(false);
             nextButton.gameObject.SetActive(true);
             Select(nextButton.gameObject);
+        }
+
+        private void CompleteAtCycleEnd()
+        {
+            remainingTime = 0f;
+            UpdateTimer();
+
+            float roundedCycleCount = Mathf.Round(CycleCount);
+            double finalElapsedTime = Mathf.Approximately(CycleCount, roundedCycleCount)
+                ? 0d
+                : exerciseDuration;
+            UpdateTargetPosition(finalElapsedTime);
+            Complete();
         }
 
         private void Interrupt()
@@ -175,6 +212,7 @@ namespace EyeTraining.Exercises
         private void ReturnHome()
         {
             isRunning = false;
+            trainingBoundsRenderer.enabled = false;
             exerciseScreen.SetActive(false);
             exerciseWorld.SetActive(false);
             homeScreen.SetActive(true);
@@ -185,7 +223,7 @@ namespace EyeTraining.Exercises
         {
             Vector2 viewportPosition = trackingPath.Evaluate(
                 0d,
-                GetTargetExtentsInViewport());
+                targetExtentsInViewport);
             target.position = ViewportToTargetPlane(viewportPosition);
         }
 
@@ -217,6 +255,83 @@ namespace EyeTraining.Exercises
                 new Vector3(viewportPosition.x, viewportPosition.y, distanceFromCamera));
             position.z = target.position.z;
             return position;
+        }
+
+        private void CreateTrainingBoundsRenderer()
+        {
+            GameObject boundsObject = new("Training Bounds (Debug)");
+            boundsObject.transform.SetParent(exerciseWorld.transform, false);
+            trainingBoundsRenderer = boundsObject.AddComponent<LineRenderer>();
+            trainingBoundsRenderer.enabled = false;
+            trainingBoundsRenderer.useWorldSpace = true;
+            trainingBoundsRenderer.loop = true;
+            trainingBoundsRenderer.positionCount = 4;
+            trainingBoundsRenderer.startColor = TrainingBoundsColor;
+            trainingBoundsRenderer.endColor = TrainingBoundsColor;
+            trainingBoundsRenderer.numCapVertices = 0;
+            trainingBoundsRenderer.numCornerVertices = 0;
+            trainingBoundsRenderer.alignment = LineAlignment.View;
+            trainingBoundsRenderer.textureMode = LineTextureMode.Stretch;
+            trainingBoundsRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            trainingBoundsRenderer.receiveShadows = false;
+            trainingBoundsRenderer.lightProbeUsage = LightProbeUsage.Off;
+            trainingBoundsRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
+            trainingBoundsRenderer.sharedMaterial = targetRenderer.sharedMaterial;
+            trainingBoundsRenderer.sortingLayerID = targetRenderer.sortingLayerID;
+            trainingBoundsRenderer.sortingOrder = targetRenderer.sortingOrder - 1;
+        }
+
+        private void UpdateTrainingBounds(bool force = false)
+        {
+            bool shouldShow = showTrainingBounds && isRunning;
+            trainingBoundsRenderer.enabled = shouldShow;
+
+            if (!shouldShow)
+            {
+                return;
+            }
+
+            float targetPlaneZ = target.position.z;
+            bool dimensionsChanged =
+                lastBoundsPixelWidth != exerciseCamera.pixelWidth ||
+                lastBoundsPixelHeight != exerciseCamera.pixelHeight ||
+                !Mathf.Approximately(lastBoundsOrthographicSize, exerciseCamera.orthographicSize) ||
+                !Mathf.Approximately(lastBoundsTargetPlaneZ, targetPlaneZ);
+
+            if (!force && !dimensionsChanged)
+            {
+                return;
+            }
+
+            trainingBoundsRenderer.SetPosition(
+                0,
+                ViewportToTargetPlane(new Vector2(
+                    TrackingTrainingArea.Left,
+                    TrackingTrainingArea.Bottom)));
+            trainingBoundsRenderer.SetPosition(
+                1,
+                ViewportToTargetPlane(new Vector2(
+                    TrackingTrainingArea.Left,
+                    TrackingTrainingArea.Top)));
+            trainingBoundsRenderer.SetPosition(
+                2,
+                ViewportToTargetPlane(new Vector2(
+                    TrackingTrainingArea.Right,
+                    TrackingTrainingArea.Top)));
+            trainingBoundsRenderer.SetPosition(
+                3,
+                ViewportToTargetPlane(new Vector2(
+                    TrackingTrainingArea.Right,
+                    TrackingTrainingArea.Bottom)));
+
+            float visibleWorldHeight = exerciseCamera.orthographicSize * 2f;
+            float lineWidth = visibleWorldHeight * TrainingBoundsLineWidthInViewportHeight;
+            trainingBoundsRenderer.startWidth = lineWidth;
+            trainingBoundsRenderer.endWidth = lineWidth;
+            lastBoundsPixelWidth = exerciseCamera.pixelWidth;
+            lastBoundsPixelHeight = exerciseCamera.pixelHeight;
+            lastBoundsOrthographicSize = exerciseCamera.orthographicSize;
+            lastBoundsTargetPlaneZ = targetPlaneZ;
         }
 
         private void UpdateTimer()

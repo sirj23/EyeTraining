@@ -6,12 +6,7 @@ namespace EyeTraining.Exercises
     {
         private const int ArcLengthSegments = 256;
         private const float WavePeriods = 2f;
-        private const float CenterViewportX = 0.5f;
-        private const float HorizontalViewportMargin = 0.12f;
-        private const float BottomViewportLimit = 0.22f;
-        private const float TopViewportLimit = 0.74f;
         private const float AmplitudeInViewportHeight = 0.10f;
-        private const float LinearSpeed = Mathf.PI * 2f * 0.18f / 10f;
 
         private readonly float[] cumulativeArcLengths = new float[ArcLengthSegments + 1];
         private Vector2 cachedTargetExtents = new(float.NaN, float.NaN);
@@ -25,11 +20,17 @@ namespace EyeTraining.Exercises
         {
             EnsureArcLengthTable(targetExtentsInViewport);
             float traveledDistance = Mathf.PingPong(
-                (float)(elapsedTime * LinearSpeed),
+                (float)(elapsedTime * TrackingMotionSettings.LinearSpeed),
                 pathLength);
             float progress = FindProgressForArcLength(traveledDistance);
 
             return ToViewport(EvaluateLocalPoint(progress));
+        }
+
+        public float GetFullCycleLength(Vector2 targetExtentsInViewport)
+        {
+            EnsureArcLengthTable(targetExtentsInViewport);
+            return pathLength * 2f;
         }
 
         private void EnsureArcLengthTable(Vector2 targetExtentsInViewport)
@@ -41,10 +42,10 @@ namespace EyeTraining.Exercises
 
             cachedTargetExtents = targetExtentsInViewport;
             aspectCorrection = targetExtentsInViewport.x / targetExtentsInViewport.y;
-            top = TopViewportLimit - targetExtentsInViewport.y;
-            bottom = BottomViewportLimit + targetExtentsInViewport.y;
+            top = TrackingTrainingArea.GetCenterTop(targetExtentsInViewport);
+            bottom = TrackingTrainingArea.GetCenterBottom(targetExtentsInViewport);
             float horizontalSpace =
-                (0.5f - HorizontalViewportMargin - targetExtentsInViewport.x) /
+                (TrackingTrainingArea.Center.x - TrackingTrainingArea.GetCenterLeft(targetExtentsInViewport)) /
                 aspectCorrection;
             amplitude = Mathf.Min(AmplitudeInViewportHeight, horizontalSpace);
             cumulativeArcLengths[0] = 0f;
@@ -97,7 +98,7 @@ namespace EyeTraining.Exercises
         private Vector2 ToViewport(Vector2 localPosition)
         {
             return new Vector2(
-                CenterViewportX + localPosition.x * aspectCorrection,
+                TrackingTrainingArea.Center.x + localPosition.x * aspectCorrection,
                 localPosition.y);
         }
     }

@@ -5,16 +5,12 @@ namespace EyeTraining.Exercises
     public sealed class LowerHorizontalSemiEllipseTrackingPath : ITrackingPath
     {
         private const int ArcLengthSegments = 256;
-        private const float CenterViewportX = 0.5f;
-        private const float CenterViewportY = 0.48f;
-        private const float RadiusXInViewportHeight = 0.32f;
-        private const float RadiusYInViewportHeight = 0.16f;
-        private const float CircleRadiusInViewportHeight = 0.18f;
-        private const float CircleRevolutionDurationSeconds = 10f;
+        private const float HorizontalCoverage = 0.88f;
+        private const float RadiusXInViewportHeight = 0.62f;
+        private const float RadiusYInViewportHeight = 0.19f;
 
         private readonly float[] cumulativeArcLengths;
         private readonly float totalArcLength;
-        private readonly double traverseDurationSeconds;
 
         public LowerHorizontalSemiEllipseTrackingPath()
         {
@@ -31,25 +27,30 @@ namespace EyeTraining.Exercises
             }
 
             totalArcLength = cumulativeArcLengths[ArcLengthSegments];
-            float linearSpeed =
-                Mathf.PI * 2f * CircleRadiusInViewportHeight /
-                CircleRevolutionDurationSeconds;
-            traverseDurationSeconds = totalArcLength / linearSpeed;
         }
 
         public Vector2 Evaluate(double elapsedTime, Vector2 targetExtentsInViewport)
         {
             float aspectCorrection = targetExtentsInViewport.x / targetExtentsInViewport.y;
-            float radiusX = RadiusXInViewportHeight * aspectCorrection;
-            float pingPongProgress = Mathf.PingPong(
-                (float)(elapsedTime / traverseDurationSeconds),
-                1f);
-            float arcProgress = FindProgressForArcLength(pingPongProgress * totalArcLength);
+            float safeScale = GetSafeScale(targetExtentsInViewport, aspectCorrection);
+            float radiusX = RadiusXInViewportHeight * safeScale * aspectCorrection;
+            float oneWayLength = totalArcLength * safeScale;
+            float traveledDistance = Mathf.PingPong(
+                (float)(elapsedTime * TrackingMotionSettings.LinearSpeed),
+                oneWayLength);
+            float arcProgress = FindProgressForArcLength(traveledDistance / safeScale);
             float angle = Mathf.PI * (1f + arcProgress);
-            float viewportX = CenterViewportX + radiusX * Mathf.Cos(angle);
-            float viewportY = CenterViewportY + RadiusYInViewportHeight * Mathf.Sin(angle);
+            float viewportX = TrackingTrainingArea.Center.x + radiusX * Mathf.Cos(angle);
+            float viewportY = TrackingTrainingArea.Center.y
+                + RadiusYInViewportHeight * safeScale * Mathf.Sin(angle);
 
             return new Vector2(viewportX, viewportY);
+        }
+
+        public float GetFullCycleLength(Vector2 targetExtentsInViewport)
+        {
+            float aspectCorrection = targetExtentsInViewport.x / targetExtentsInViewport.y;
+            return totalArcLength * GetSafeScale(targetExtentsInViewport, aspectCorrection) * 2f;
         }
 
         private float FindProgressForArcLength(float targetArcLength)
@@ -76,6 +77,25 @@ namespace EyeTraining.Exercises
             float segmentProgress = (targetArcLength - segmentStartLength) / segmentLength;
 
             return (lowerIndex + segmentProgress) / ArcLengthSegments;
+        }
+
+        private static float GetSafeScale(
+            Vector2 targetExtentsInViewport,
+            float aspectCorrection)
+        {
+            float availableHalfWidth =
+                (TrackingTrainingArea.Center.x
+                    - TrackingTrainingArea.GetCenterLeft(targetExtentsInViewport))
+                / aspectCorrection;
+            float horizontalScale =
+                availableHalfWidth * HorizontalCoverage / RadiusXInViewportHeight;
+            float verticalScale = TrackingTrainingArea.GetCenteredShapeScale(
+                targetExtentsInViewport,
+                aspectCorrection,
+                0f,
+                RadiusYInViewportHeight);
+
+            return Mathf.Clamp01(Mathf.Min(horizontalScale, verticalScale));
         }
 
         private static Vector2 EvaluateLocalPoint(float progress)

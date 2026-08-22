@@ -4,20 +4,28 @@ namespace EyeTraining.Exercises
 {
     public sealed class VerticalTrackingPath : ITrackingPath
     {
-        private const float BottomViewportMargin = 0.22f;
-        private const float TopViewportMargin = 0.26f;
         private const float TargetViewportX = 0.5f;
-        private const float TargetViewportSpeed = 77f / 1080f;
-
         public Vector2 Evaluate(double elapsedTime, Vector2 targetExtentsInViewport)
         {
-            float bottomLimit = BottomViewportMargin + targetExtentsInViewport.y;
-            float topLimit = 1f - TopViewportMargin - targetExtentsInViewport.y;
-            float travelDistance = topLimit - bottomLimit;
+            float bottomLimit = TrackingTrainingArea.GetCenterBottom(targetExtentsInViewport);
+            float travelDistance = GetOneWayLength(targetExtentsInViewport);
             float viewportY = bottomLimit
-                + Mathf.PingPong((float)(elapsedTime * TargetViewportSpeed), travelDistance);
+                + Mathf.PingPong(
+                    (float)elapsedTime * TrackingMotionSettings.LinearSpeed,
+                    travelDistance);
 
             return new Vector2(TargetViewportX, viewportY);
+        }
+
+        public float GetFullCycleLength(Vector2 targetExtentsInViewport)
+        {
+            return GetOneWayLength(targetExtentsInViewport) * 2f;
+        }
+
+        private static float GetOneWayLength(Vector2 targetExtentsInViewport)
+        {
+            return TrackingTrainingArea.GetCenterTop(targetExtentsInViewport)
+                - TrackingTrainingArea.GetCenterBottom(targetExtentsInViewport);
         }
     }
 }
