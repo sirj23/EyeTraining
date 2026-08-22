@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace EyeTraining.Exercises
 {
-    public sealed class CircleTrackingPath : ITrackingPath
+    public sealed class CircleTrackingPath : IClosedTrackingPath
     {
         private const float RadiusInViewportHeight = 0.18f;
         public Vector2 Evaluate(double elapsedTime, Vector2 targetExtentsInViewport)

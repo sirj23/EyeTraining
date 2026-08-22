@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace EyeTraining.Exercises
 {
-    public sealed class HorizontalRectangleTrackingPath : ITrackingPath
+    public sealed class HorizontalRectangleTrackingPath : IClosedTrackingPath
     {
         private const float HorizontalCoverage = 0.88f;
         private const float HalfWidthInViewportHeight = 0.62f;

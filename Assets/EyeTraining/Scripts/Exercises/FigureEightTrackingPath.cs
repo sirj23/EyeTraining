@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace EyeTraining.Exercises
 {
-    public sealed class FigureEightTrackingPath : ITrackingPath
+    public sealed class FigureEightTrackingPath : IClosedTrackingPath
     {
         private const int ArcLengthSegments = 256;
         private const float HalfWidthInViewportHeight = 0.30f;

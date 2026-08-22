@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace EyeTraining.Exercises
 {
-    public sealed class HorizontalEllipseTrackingPath : ITrackingPath
+    public sealed class HorizontalEllipseTrackingPath : IClosedTrackingPath
     {
         private const int ArcLengthSegments = 256;
         private const float HorizontalCoverage = 0.88f;

@@ -523,6 +523,7 @@ MonoBehaviour:
   interruptButton: {fileID: 771989337}
   nextButton: {fileID: 976497016}
   startTrainingButton: {fileID: 1086314225}
+  pathVisibility: 0
 --- !u!1 &9106798
 GameObject:
   m_ObjectHideFlags: 0

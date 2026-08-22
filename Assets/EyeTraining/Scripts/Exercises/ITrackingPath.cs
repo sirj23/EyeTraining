@@ -8,4 +8,8 @@ namespace EyeTraining.Exercises
 
         float GetFullCycleLength(Vector2 targetExtentsInViewport);
     }
+
+    public interface IClosedTrackingPath : ITrackingPath
+    {
+    }
 }

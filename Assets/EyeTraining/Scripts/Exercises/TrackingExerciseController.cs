@@ -55,10 +55,14 @@ namespace EyeTraining.Exercises
         [SerializeField] private Button nextButton;
         [SerializeField] private Button startTrainingButton;
 
+        [Header("Path")]
+        [SerializeField] private TrackingPathVisibility pathVisibility;
+
         [Header("Debug")]
         [SerializeField] private bool showTrainingBounds;
 
         private ITrackingPath trackingPath;
+        private TrackingPathRenderer trackingPathRenderer;
         private LineRenderer trainingBoundsRenderer;
         private TMP_Text countdownText;
         private Button introStartButton;
@@ -87,6 +91,12 @@ namespace EyeTraining.Exercises
         {
             trackingPath = CreateTrackingPath();
             CreateTrainingBoundsRenderer();
+            trackingPathRenderer = new TrackingPathRenderer(
+                exerciseWorld.transform,
+                exerciseCamera,
+                targetRenderer.sharedMaterial,
+                targetRenderer.sortingLayerID,
+                targetRenderer.sortingOrder - 1);
             CreateIntroControls();
             CacheRunningPresentation();
             introStartButton.onClick.AddListener(StartIntroSequence);
@@ -125,6 +135,7 @@ namespace EyeTraining.Exercises
             if (phase == ExercisePhase.Running)
             {
                 UpdateTargetPosition(Time.timeAsDouble - movementStartTime);
+                trackingPathRenderer.UpdateIfNeeded();
             }
 
             UpdateTrainingBounds();
@@ -153,6 +164,7 @@ namespace EyeTraining.Exercises
             remainingTime = exerciseDuration;
             ResetTargetPosition();
             targetRenderer.enabled = false;
+            trackingPathRenderer.Hide();
             ApplyIntroPresentation();
             phase = ExercisePhase.Intro;
             UpdateTimer();
@@ -210,6 +222,11 @@ namespace EyeTraining.Exercises
             targetRenderer.enabled = true;
             movementStartTime = Time.timeAsDouble;
             phase = ExercisePhase.Running;
+            trackingPathRenderer.Show(
+                trackingPath,
+                targetExtentsInViewport,
+                pathVisibility,
+                target.position.z);
             UpdateTrainingBounds(true);
             Select(interruptButton.gameObject);
         }
@@ -284,6 +301,7 @@ namespace EyeTraining.Exercises
         {
             phase = ExercisePhase.Completed;
             trainingBoundsRenderer.enabled = false;
+            trackingPathRenderer.Hide();
             completionMessage.SetActive(true);
             interruptButton.gameObject.SetActive(false);
             nextButton.gameObject.SetActive(true);
@@ -313,6 +331,7 @@ namespace EyeTraining.Exercises
             phase = ExercisePhase.Inactive;
             StopIntroSequence();
             trainingBoundsRenderer.enabled = false;
+            trackingPathRenderer.Hide();
             targetRenderer.enabled = false;
             introStartButton.gameObject.SetActive(false);
             countdownText.gameObject.SetActive(false);
@@ -541,7 +560,7 @@ namespace EyeTraining.Exercises
             trainingBoundsRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
             trainingBoundsRenderer.sharedMaterial = targetRenderer.sharedMaterial;
             trainingBoundsRenderer.sortingLayerID = targetRenderer.sortingLayerID;
-            trainingBoundsRenderer.sortingOrder = targetRenderer.sortingOrder - 1;
+            trainingBoundsRenderer.sortingOrder = targetRenderer.sortingOrder - 2;
         }
 
         private void UpdateTrainingBounds(bool force = false)

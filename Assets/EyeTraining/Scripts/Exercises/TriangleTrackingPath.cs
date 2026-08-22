@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace EyeTraining.Exercises
 {
-    public sealed class TriangleTrackingPath : ITrackingPath
+    public sealed class TriangleTrackingPath : IClosedTrackingPath
     {
         private const float HalfWidthInViewportHeight = 0.28f;
         private const float HalfHeightInViewportHeight = 0.18f;
