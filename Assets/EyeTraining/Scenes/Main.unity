@@ -517,6 +517,7 @@ MonoBehaviour:
   targetRenderer: {fileID: 1259418286}
   pathType: 0
   titleText: {fileID: 816859648}
+  instructionText: {fileID: 1838157311}
   timerText: {fileID: 206696323}
   completionMessage: {fileID: 251521973}
   interruptButton: {fileID: 771989337}
