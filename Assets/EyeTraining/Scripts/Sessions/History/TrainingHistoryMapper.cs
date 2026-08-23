@@ -22,6 +22,11 @@ namespace EyeTraining.Sessions.History
             for (var index = 0; index < snapshot.Entries.Count; index++)
             {
                 ExerciseHistoryEntry entry = snapshot.Entries[index];
+                if (!TrackingExerciseIds.Contains(entry.ExerciseId))
+                {
+                    continue;
+                }
+
                 usages.Add(new ExerciseUsage(
                     entry.ExerciseId,
                     entry.CompletedSessionNumber));

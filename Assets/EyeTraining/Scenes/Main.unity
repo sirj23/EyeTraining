@@ -392,6 +392,7 @@ GameObject:
   - component: {fileID: 200005}
   - component: {fileID: 200006}
   - component: {fileID: 200007}
+  - component: {fileID: 200008}
   m_Layer: 0
   m_Name: App
   m_TagString: Untagged
@@ -544,7 +545,31 @@ MonoBehaviour:
   profileScreenController: {fileID: 200003}
   preparationController: {fileID: 200005}
   trackingExerciseController: {fileID: 200006}
+  landoltExerciseController: {fileID: 200008}
+  debugMode: 0
   skipUnsupportedExercisesInDevelopment: 1
+--- !u!114 &200008
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 200000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f01b18994f5040d98031e76766717b68, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EyeTraining.Exercises.Landolt.LandoltExerciseController
+  canvas: {fileID: 746076483}
+  homeScreen: {fileID: 1535237442}
+  trackingExerciseScreen: {fileID: 1601454828}
+  textTemplate: {fileID: 816859648}
+  buttonTemplate: {fileID: 771989337}
+  homeStartTrainingButton: {fileID: 1086314225}
+  backgroundMode: 0
+  debugStartLevel: 0
+  debugFixedDirection: 0
+  debugDirection: 0
 --- !u!1 &9106798
 GameObject:
   m_ObjectHideFlags: 0

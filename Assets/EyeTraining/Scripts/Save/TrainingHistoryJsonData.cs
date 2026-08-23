@@ -36,5 +36,19 @@ namespace EyeTraining.Save
         public string completionStatus;
         public string feedback;
         public string completedAt;
+        public bool hasLandoltDetails;
+        public LandoltHistoryRecord landolt;
+    }
+
+    [Serializable]
+    internal sealed class LandoltHistoryRecord
+    {
+        public int correctAnswers;
+        public int errorCount;
+        public int exposureCount;
+        public int highestLevel;
+        public int finalLevel;
+        public string backgroundMode;
+        public string directionMode;
     }
 }

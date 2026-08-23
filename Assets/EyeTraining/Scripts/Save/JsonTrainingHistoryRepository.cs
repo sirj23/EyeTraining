@@ -3,13 +3,15 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using EyeTraining.Sessions.History;
+using EyeTraining.Exercises.Landolt;
 using UnityEngine;
 
 namespace EyeTraining.Save
 {
     public sealed class JsonTrainingHistoryRepository : ITrainingHistoryRepository
     {
-        private const int CurrentFormatVersion = 1;
+        private const int CurrentFormatVersion = 2;
+        private const int MinimumSupportedFormatVersion = 1;
         private const string FileName = "training-history.json";
 
         private readonly string _filePath;
@@ -33,18 +35,49 @@ namespace EyeTraining.Save
         {
             ValidateProfileId(profileId);
 
-            if (!TryLoadAll(out Dictionary<string, TrainingHistorySnapshot> snapshots))
+            if (!TryLoadFile(out TrainingHistoryFileData fileData))
             {
                 snapshot = null;
                 return false;
             }
 
-            if (!snapshots.TryGetValue(profileId, out snapshot))
+            try
             {
-                snapshot = TrainingHistorySnapshot.CreateNotStarted(profileId);
-            }
+                TrainingProfileRecord selectedRecord = null;
+                var profileIds = new HashSet<string>(StringComparer.Ordinal);
+                for (var index = 0; index < fileData.profiles.Count; index++)
+                {
+                    TrainingProfileRecord record = fileData.profiles[index];
+                    if (record == null || string.IsNullOrWhiteSpace(record.profileId))
+                    {
+                        throw new InvalidDataException("Training profile has no valid profile id.");
+                    }
 
-            return true;
+                    if (!profileIds.Add(record.profileId))
+                    {
+                        throw new InvalidDataException(
+                            $"Duplicate training profile '{record.profileId}'.");
+                    }
+
+                    if (string.Equals(record.profileId, profileId, StringComparison.Ordinal))
+                    {
+                        selectedRecord = record;
+                    }
+                }
+
+                snapshot = selectedRecord == null
+                    ? TrainingHistorySnapshot.CreateNotStarted(profileId)
+                    : ToDomain(selectedRecord, fileData.version);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError(
+                    $"Nie udało się odczytać historii treningu profilu '{profileId}' "
+                    + $"z '{_filePath}': {exception.Message}");
+                snapshot = TrainingHistorySnapshot.CreateNotStarted(profileId);
+                return false;
+            }
         }
 
         public bool Save(TrainingHistorySnapshot snapshot)
@@ -84,37 +117,18 @@ namespace EyeTraining.Save
         {
             snapshots = new Dictionary<string, TrainingHistorySnapshot>(StringComparer.Ordinal);
 
-            if (!File.Exists(_filePath))
+            if (!TryLoadFile(out TrainingHistoryFileData fileData))
             {
-                return true;
+                return false;
             }
 
             try
             {
-                string json = File.ReadAllText(_filePath);
-                TrainingHistoryFileData fileData =
-                    JsonUtility.FromJson<TrainingHistoryFileData>(json);
-
-                if (fileData == null)
-                {
-                    throw new InvalidDataException("Training history file is not valid JSON data.");
-                }
-
-                if (fileData.version != CurrentFormatVersion)
-                {
-                    throw new NotSupportedException(
-                        $"Unsupported training history version {fileData.version}; "
-                        + $"expected {CurrentFormatVersion}.");
-                }
-
-                if (fileData.profiles == null)
-                {
-                    throw new InvalidDataException("Training history file has no profiles list.");
-                }
-
                 for (var index = 0; index < fileData.profiles.Count; index++)
                 {
-                    TrainingHistorySnapshot snapshot = ToDomain(fileData.profiles[index]);
+                    TrainingHistorySnapshot snapshot = ToDomain(
+                        fileData.profiles[index],
+                        fileData.version);
                     if (!snapshots.TryAdd(snapshot.State.ProfileId, snapshot))
                     {
                         throw new InvalidDataException(
@@ -130,6 +144,52 @@ namespace EyeTraining.Save
                     $"Nie udało się odczytać historii treningu z '{_filePath}': "
                     + exception.Message);
                 snapshots.Clear();
+                return false;
+            }
+        }
+
+        private bool TryLoadFile(out TrainingHistoryFileData fileData)
+        {
+            fileData = new TrainingHistoryFileData
+            {
+                version = CurrentFormatVersion,
+                profiles = new List<TrainingProfileRecord>()
+            };
+
+            if (!File.Exists(_filePath))
+            {
+                return true;
+            }
+
+            try
+            {
+                string json = File.ReadAllText(_filePath);
+                fileData = JsonUtility.FromJson<TrainingHistoryFileData>(json);
+                if (fileData == null)
+                {
+                    throw new InvalidDataException("Training history file is not valid JSON data.");
+                }
+
+                if (fileData.version < MinimumSupportedFormatVersion
+                    || fileData.version > CurrentFormatVersion)
+                {
+                    throw new NotSupportedException(
+                        $"Unsupported training history version {fileData.version}; "
+                        + $"supported range is {MinimumSupportedFormatVersion}–{CurrentFormatVersion}.");
+                }
+
+                if (fileData.profiles == null)
+                {
+                    throw new InvalidDataException("Training history file has no profiles list.");
+                }
+
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError(
+                    $"Nie udało się odczytać historii treningu z '{_filePath}': "
+                    + exception.Message);
                 return false;
             }
         }
@@ -197,7 +257,9 @@ namespace EyeTraining.Save
             }
         }
 
-        private static TrainingHistorySnapshot ToDomain(TrainingProfileRecord record)
+        private static TrainingHistorySnapshot ToDomain(
+            TrainingProfileRecord record,
+            int fileVersion)
         {
             if (record == null || string.IsNullOrWhiteSpace(record.profileId))
             {
@@ -225,7 +287,10 @@ namespace EyeTraining.Save
 
             for (var index = 0; index < record.exerciseHistory.Count; index++)
             {
-                entries.Add(ToDomain(record.profileId, record.exerciseHistory[index]));
+                entries.Add(ToDomain(
+                    record.profileId,
+                    record.exerciseHistory[index],
+                    fileVersion));
             }
 
             return new TrainingHistorySnapshot(state, entries);
@@ -233,7 +298,8 @@ namespace EyeTraining.Save
 
         private static ExerciseHistoryEntry ToDomain(
             string profileId,
-            ExerciseHistoryRecord record)
+            ExerciseHistoryRecord record,
+            int fileVersion)
         {
             if (record == null)
             {
@@ -255,6 +321,9 @@ namespace EyeTraining.Save
                 throw new InvalidDataException($"Unknown exercise feedback '{record.feedback}'.");
             }
 
+            IExerciseHistoryDetails details = fileVersion >= 2
+                ? ToLandoltDetails(record)
+                : null;
             return new ExerciseHistoryEntry(
                 profileId,
                 record.exerciseId,
@@ -262,7 +331,8 @@ namespace EyeTraining.Save
                 record.hasAppliedLevel ? record.appliedLevel : (int?)null,
                 completionStatus,
                 feedback,
-                ParseRequiredDate(record.completedAt, "completedAt"));
+                ParseRequiredDate(record.completedAt, "completedAt"),
+                details);
         }
 
         private static TrainingProfileRecord ToRecord(TrainingHistorySnapshot snapshot)
@@ -283,7 +353,7 @@ namespace EyeTraining.Save
             for (var index = 0; index < snapshot.Entries.Count; index++)
             {
                 ExerciseHistoryEntry entry = snapshot.Entries[index];
-                record.exerciseHistory.Add(new ExerciseHistoryRecord
+                var historyRecord = new ExerciseHistoryRecord
                 {
                     exerciseId = entry.ExerciseId,
                     completedSessionNumber = entry.CompletedSessionNumber,
@@ -291,11 +361,75 @@ namespace EyeTraining.Save
                     appliedLevel = entry.AppliedLevel.GetValueOrDefault(),
                     completionStatus = entry.CompletionStatus.ToString(),
                     feedback = entry.Feedback.ToString(),
-                    completedAt = entry.CompletedAt.ToString("O", CultureInfo.InvariantCulture)
-                });
+                    completedAt = entry.CompletedAt.ToString("O", CultureInfo.InvariantCulture),
+                    hasLandoltDetails = entry.Details is LandoltExerciseHistoryDetails,
+                    landolt = ToLandoltRecord(entry.Details)
+                };
+                record.exerciseHistory.Add(historyRecord);
             }
 
             return record;
+        }
+
+        private static IExerciseHistoryDetails ToLandoltDetails(ExerciseHistoryRecord historyRecord)
+        {
+            LandoltHistoryRecord record = historyRecord.landolt;
+            bool draftV2Payload = record != null
+                && (!string.IsNullOrEmpty(record.backgroundMode)
+                    || !string.IsNullOrEmpty(record.directionMode));
+
+            if (!historyRecord.hasLandoltDetails && !draftV2Payload)
+            {
+                return null;
+            }
+
+            if (record == null)
+            {
+                throw new InvalidDataException(
+                    "Landolt history is marked as present but has no payload.");
+            }
+
+            if (!Enum.TryParse(record.backgroundMode, out LandoltBackgroundMode backgroundMode)
+                || !Enum.IsDefined(typeof(LandoltBackgroundMode), backgroundMode)
+                || !Enum.TryParse(record.directionMode, out LandoltDirectionMode directionMode)
+                || !Enum.IsDefined(typeof(LandoltDirectionMode), directionMode))
+            {
+                throw new InvalidDataException("Landolt history contains an unknown mode.");
+            }
+
+            return new LandoltExerciseHistoryDetails(
+                record.correctAnswers,
+                record.errorCount,
+                record.exposureCount,
+                record.highestLevel,
+                record.finalLevel,
+                backgroundMode,
+                directionMode);
+        }
+
+        private static LandoltHistoryRecord ToLandoltRecord(IExerciseHistoryDetails details)
+        {
+            if (details == null)
+            {
+                return null;
+            }
+
+            if (details is not LandoltExerciseHistoryDetails landolt)
+            {
+                throw new InvalidDataException(
+                    $"Unsupported exercise history details type '{details.GetType().Name}'.");
+            }
+
+            return new LandoltHistoryRecord
+            {
+                correctAnswers = landolt.CorrectAnswers,
+                errorCount = landolt.ErrorCount,
+                exposureCount = landolt.ExposureCount,
+                highestLevel = landolt.HighestLevel,
+                finalLevel = landolt.FinalLevel,
+                backgroundMode = landolt.BackgroundMode.ToString(),
+                directionMode = landolt.DirectionMode.ToString()
+            };
         }
 
         private static DateTimeOffset ParseRequiredDate(string value, string fieldName)

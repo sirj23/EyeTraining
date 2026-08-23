@@ -1,6 +1,7 @@
 using System;
 using EyeTraining.Core;
 using EyeTraining.Exercises;
+using EyeTraining.Exercises.Landolt;
 using EyeTraining.Profiles;
 using EyeTraining.Save;
 using EyeTraining.Sessions.History;
@@ -18,8 +19,10 @@ namespace EyeTraining.Sessions.Runtime
         [SerializeField] private ProfileScreenController profileScreenController;
         [SerializeField] private PreparationController preparationController;
         [SerializeField] private TrackingExerciseController trackingExerciseController;
+        [SerializeField] private LandoltExerciseController landoltExerciseController;
 
         [Header("Development")]
+        [SerializeField] private SessionDebugMode debugMode;
         [Tooltip("Temporary fallback. Must be disabled before production.")]
         [SerializeField] private bool skipUnsupportedExercisesInDevelopment = true;
 
@@ -32,6 +35,7 @@ namespace EyeTraining.Sessions.Runtime
         private bool currentStepResultReceived;
         private bool advancing;
         private bool skippedUnsupportedExercise;
+        private bool debugLandoltOnlyActive;
 
         public SessionRuntimePhase Phase { get; private set; } = SessionRuntimePhase.Inactive;
 
@@ -58,6 +62,7 @@ namespace EyeTraining.Sessions.Runtime
             profileScreenController ??= GetComponent<ProfileScreenController>();
             preparationController ??= GetComponent<PreparationController>();
             trackingExerciseController ??= GetComponent<TrackingExerciseController>();
+            landoltExerciseController ??= GetComponent<LandoltExerciseController>();
 
             repository = new JsonTrainingHistoryRepository();
             trackingCatalog = new TrackingExerciseCatalog();
@@ -75,6 +80,8 @@ namespace EyeTraining.Sessions.Runtime
             preparationController.ReturnedToModeSelection += HandleReturnedToModeSelection;
             trackingExerciseController.ResultReady += HandleTrackingResult;
             trackingExerciseController.ContinueRequested += HandleContinueRequested;
+            landoltExerciseController.ResultReady += HandleLandoltResult;
+            landoltExerciseController.ContinueRequested += HandleContinueRequested;
         }
 
         private void OnDestroy()
@@ -89,6 +96,12 @@ namespace EyeTraining.Sessions.Runtime
             {
                 trackingExerciseController.ResultReady -= HandleTrackingResult;
                 trackingExerciseController.ContinueRequested -= HandleContinueRequested;
+            }
+
+            if (landoltExerciseController != null)
+            {
+                landoltExerciseController.ResultReady -= HandleLandoltResult;
+                landoltExerciseController.ContinueRequested -= HandleContinueRequested;
             }
         }
 
@@ -158,7 +171,24 @@ namespace EyeTraining.Sessions.Runtime
 
             guidanceMode = selectedGuidanceMode;
             pendingSessionStartDate = DateTimeOffset.Now;
+            if (debugMode == SessionDebugMode.LandoltOnly)
+            {
+                StartDebugLandoltOnly();
+                return;
+            }
+
             AdvanceToNextExercise();
+        }
+
+        private void StartDebugLandoltOnly()
+        {
+            debugLandoltOnlyActive = true;
+            currentStepResultReceived = false;
+            CurrentExerciseIndex = -1;
+            CurrentPlannedExercise = null;
+            Phase = SessionRuntimePhase.RunningExercise;
+            Debug.Log("[SessionRuntime] Development mode: starting Landolt only; persistence disabled.");
+            landoltExerciseController.Begin(guidanceMode, CurrentSessionNumber);
         }
 
         public void AbortSession()
@@ -199,6 +229,16 @@ namespace EyeTraining.Sessions.Runtime
                     if (CurrentPlannedExercise.Definition.Family == ExerciseFamily.Tracking)
                     {
                         StartTracking(CurrentPlannedExercise);
+                        return;
+                    }
+
+                    if (CurrentPlannedExercise.Definition.Family == ExerciseFamily.LandoltC
+                        && string.Equals(
+                            CurrentPlannedExercise.Definition.Id,
+                            SessionSchedulingDefinitions.LandoltStandardId,
+                            StringComparison.Ordinal))
+                    {
+                        StartLandolt();
                         return;
                     }
 
@@ -247,6 +287,13 @@ namespace EyeTraining.Sessions.Runtime
                 parameters.PathVisibility,
                 parameters.CycleCount,
                 parameters.SpeedMultiplier);
+        }
+
+        private void StartLandolt()
+        {
+            Phase = SessionRuntimePhase.RunningExercise;
+            Debug.Log("[SessionRuntime] Starting: " + CurrentPlannedExercise.Definition.Id);
+            landoltExerciseController.Begin(guidanceMode, CurrentSessionNumber);
         }
 
         private void HandlePreparationCompleted()
@@ -301,10 +348,83 @@ namespace EyeTraining.Sessions.Runtime
             Phase = SessionRuntimePhase.WaitingForContinue;
         }
 
+        private void HandleLandoltResult(LandoltExerciseResult result)
+        {
+            if (Phase != SessionRuntimePhase.RunningExercise || currentStepResultReceived)
+            {
+                return;
+            }
+
+            if (debugLandoltOnlyActive)
+            {
+                currentStepResultReceived = true;
+                Debug.Log(
+                    $"[SessionRuntime] Development Landolt result: {result.CompletionStatus} / "
+                    + $"{result.CorrectAnswers}/{result.ExposureCount}; not persisted.");
+                if (result.CompletionStatus == ExerciseCompletionStatus.Interrupted)
+                {
+                    AbortSession();
+                }
+                else
+                {
+                    Phase = SessionRuntimePhase.WaitingForContinue;
+                }
+
+                return;
+            }
+
+            if (CurrentPlannedExercise == null
+                || CurrentPlannedExercise.Definition.Family != ExerciseFamily.LandoltC)
+            {
+                return;
+            }
+
+            currentStepResultReceived = true;
+            Debug.Log(
+                $"[SessionRuntime] Result: {CurrentPlannedExercise.Definition.Id} / "
+                + $"{result.CompletionStatus} / {result.CorrectAnswers}/{result.ExposureCount}");
+
+            if (result.CompletionStatus == ExerciseCompletionStatus.Interrupted)
+            {
+                AbortSession();
+                return;
+            }
+
+            var details = new LandoltExerciseHistoryDetails(
+                result.CorrectAnswers,
+                result.ErrorCount,
+                result.ExposureCount,
+                result.HighestLevel,
+                result.FinalLevel,
+                result.BackgroundMode,
+                result.DirectionMode);
+            var entry = new ExerciseHistoryEntry(
+                activeProfile.Id,
+                CurrentPlannedExercise.Definition.Id,
+                CurrentSessionNumber,
+                null,
+                result.CompletionStatus,
+                ExerciseFeedback.None,
+                DateTimeOffset.Now,
+                details);
+            PendingSnapshot = PendingSnapshot.WithEntry(entry);
+            Phase = SessionRuntimePhase.WaitingForContinue;
+        }
+
         private void HandleContinueRequested()
         {
             if (Phase != SessionRuntimePhase.WaitingForContinue || !currentStepResultReceived)
             {
+                return;
+            }
+
+            if (debugLandoltOnlyActive)
+            {
+                landoltExerciseController.ExitToHome();
+                Phase = SessionRuntimePhase.Aborted;
+                ClearPendingSession();
+                Debug.Log("[SessionRuntime] Development Landolt-only run completed without saving.");
+                PreparedSessionChanged?.Invoke();
                 return;
             }
 
@@ -367,6 +487,7 @@ namespace EyeTraining.Sessions.Runtime
             activeProfile = null;
             currentStepResultReceived = false;
             skippedUnsupportedExercise = false;
+            debugLandoltOnlyActive = false;
         }
     }
 }

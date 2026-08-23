@@ -11,7 +11,8 @@ namespace EyeTraining.Sessions.History
             int? appliedLevel,
             ExerciseCompletionStatus completionStatus,
             ExerciseFeedback feedback,
-            DateTimeOffset completedAt)
+            DateTimeOffset completedAt,
+            IExerciseHistoryDetails details = null)
         {
             if (string.IsNullOrWhiteSpace(profileId))
             {
@@ -63,6 +64,7 @@ namespace EyeTraining.Sessions.History
             CompletionStatus = completionStatus;
             Feedback = feedback;
             CompletedAt = completedAt;
+            Details = details;
         }
 
         public string ProfileId { get; }
@@ -78,5 +80,7 @@ namespace EyeTraining.Sessions.History
         public ExerciseFeedback Feedback { get; }
 
         public DateTimeOffset CompletedAt { get; }
+
+        public IExerciseHistoryDetails Details { get; }
     }
 }
