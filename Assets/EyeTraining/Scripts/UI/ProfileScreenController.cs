@@ -1,6 +1,9 @@
+using System;
 using System.Collections.Generic;
 using EyeTraining.Profiles;
 using EyeTraining.Save;
+using EyeTraining.Sessions.History;
+using EyeTraining.Sessions.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -36,26 +39,40 @@ namespace EyeTraining.UI
         [SerializeField] private TMP_Text homeProfileName;
         [SerializeField] private TMP_Text homeRankName;
         [SerializeField] private RectTransform homeRankProgressFill;
+        [SerializeField] private TMP_Text homeTrainingTitle;
+        [SerializeField] private TMP_Text homeTrainingDuration;
         [SerializeField] private Button startTrainingButton;
         [SerializeField] private Button changeProfileButton;
+        [SerializeField] private SessionRuntimeController sessionRuntimeController;
 
         private readonly List<GameObject> _generatedProfileTiles = new List<GameObject>();
 
         private IProfileRepository _profileRepository;
         private ProfileCategory? _selectedCategory;
+        private TMP_Text _homeTrainingDay;
+        private TMP_Text _homePlan;
 
         public UserProfile ActiveProfile { get; private set; }
 
         private void Awake()
         {
             _profileRepository = new JsonProfileRepository();
+            CreateHomePlanPresentation();
             BindActions();
+            if (sessionRuntimeController != null)
+            {
+                sessionRuntimeController.PreparedSessionChanged += RefreshHome;
+            }
             ShowProfileSelection();
         }
 
         private void OnDestroy()
         {
             UnbindActions();
+            if (sessionRuntimeController != null)
+            {
+                sessionRuntimeController.PreparedSessionChanged -= RefreshHome;
+            }
         }
 
         private void BindActions()
@@ -85,6 +102,7 @@ namespace EyeTraining.UI
         private void ShowProfileSelection()
         {
             ActiveProfile = null;
+            sessionRuntimeController?.AbortSession();
             addProfileScreen.SetActive(false);
             homeScreen.SetActive(false);
             profileSelectionScreen.SetActive(true);
@@ -141,7 +159,82 @@ namespace EyeTraining.UI
             profileSelectionScreen.SetActive(false);
             addProfileScreen.SetActive(false);
             homeScreen.SetActive(true);
+            RefreshHome();
             Select(startTrainingButton.gameObject);
+        }
+
+        public void RefreshHome()
+        {
+            if (ActiveProfile == null)
+            {
+                return;
+            }
+
+            if (sessionRuntimeController == null || !sessionRuntimeController.PrepareSession())
+            {
+                ShowPlanError();
+                return;
+            }
+
+            TrainingHistorySnapshot snapshot = sessionRuntimeController.PendingSnapshot;
+            int trainingDay = TrainingDayCalculator.Calculate(
+                snapshot.State.TrainingStartDate,
+                DateTimeOffset.Now);
+            _homeTrainingDay.text = $"Dzień treningu {trainingDay}";
+            homeTrainingTitle.text = "Dzisiejszy trening";
+
+            double totalSeconds = sessionRuntimeController.CurrentPlan.EstimatedDuration.TotalSeconds;
+            int estimatedMinutes = Math.Max(1, (int)Math.Ceiling(totalSeconds / 60d));
+            homeTrainingDuration.text = $"około {estimatedMinutes} min";
+
+            var lines = new List<string>(sessionRuntimeController.CurrentPlan.Exercises.Count);
+            for (var index = 0; index < sessionRuntimeController.CurrentPlan.Exercises.Count; index++)
+            {
+                lines.Add(sessionRuntimeController.CurrentPlan.Exercises[index].Definition.DisplayName);
+            }
+
+            _homePlan.text = string.Join("\n", lines);
+            startTrainingButton.interactable = true;
+            Select(startTrainingButton.gameObject);
+        }
+
+        private void ShowPlanError()
+        {
+            _homeTrainingDay.text = "Dzień treningu —";
+            homeTrainingTitle.text = "Dzisiejszy trening";
+            homeTrainingDuration.text = string.Empty;
+            _homePlan.text = "Nie udało się przygotować treningu.";
+            startTrainingButton.interactable = false;
+        }
+
+        private void CreateHomePlanPresentation()
+        {
+            _homeTrainingDay = Instantiate(homeRankName, homeScreen.transform);
+            _homeTrainingDay.name = "Training Day";
+            _homeTrainingDay.fontSize = 24f;
+            _homeTrainingDay.alignment = TextAlignmentOptions.Center;
+            ConfigureRect(_homeTrainingDay.rectTransform, 0.18f, 0.76f, 0.82f, 0.80f);
+
+            _homePlan = Instantiate(homeRankName, homeScreen.transform);
+            _homePlan.name = "Training Plan";
+            _homePlan.fontSize = 24f;
+            _homePlan.lineSpacing = 8f;
+            _homePlan.alignment = TextAlignmentOptions.TopLeft;
+            _homePlan.textWrappingMode = TextWrappingModes.Normal;
+            ConfigureRect(_homePlan.rectTransform, 0.20f, 0.30f, 0.80f, 0.50f);
+        }
+
+        private static void ConfigureRect(
+            RectTransform rectTransform,
+            float minX,
+            float minY,
+            float maxX,
+            float maxY)
+        {
+            rectTransform.anchorMin = new Vector2(minX, minY);
+            rectTransform.anchorMax = new Vector2(maxX, maxY);
+            rectTransform.anchoredPosition = Vector2.zero;
+            rectTransform.sizeDelta = Vector2.zero;
         }
 
         private void CreateProfile()

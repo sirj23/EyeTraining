@@ -47,6 +47,12 @@ namespace EyeTraining.Sessions.Runtime
 
         public TrainingHistorySnapshot PendingSnapshot { get; private set; }
 
+        public SessionScheduleResult PreparedScheduleResult { get; private set; }
+
+        public string PreparedProfileId => activeProfile?.Id;
+
+        public event Action PreparedSessionChanged;
+
         private void Awake()
         {
             profileScreenController ??= GetComponent<ProfileScreenController>();
@@ -94,6 +100,13 @@ namespace EyeTraining.Sessions.Runtime
                 return Fail("Cannot prepare a session without an active profile.");
             }
 
+            if (HasPreparedSession
+                && CurrentPlan != null
+                && string.Equals(activeProfile?.Id, profile.Id, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
             if (!repository.TryLoad(profile.Id, out TrainingHistorySnapshot snapshot))
             {
                 return Fail($"Could not load training history for profile '{profile.Id}'.");
@@ -115,6 +128,7 @@ namespace EyeTraining.Sessions.Runtime
                 }
 
                 activeProfile = profile;
+                PreparedScheduleResult = result;
                 CurrentSessionNumber = currentSessionNumber;
                 CurrentPlan = result.Plan;
                 PendingSnapshot = snapshot;
@@ -157,6 +171,7 @@ namespace EyeTraining.Sessions.Runtime
             Phase = SessionRuntimePhase.Aborted;
             ClearPendingSession();
             Debug.LogWarning("[SessionRuntime] Session aborted. Pending history was discarded.");
+            PreparedSessionChanged?.Invoke();
         }
 
         private void AdvanceToNextExercise()
@@ -331,6 +346,7 @@ namespace EyeTraining.Sessions.Runtime
             Debug.Log(
                 $"[SessionRuntime] Session {CurrentSessionNumber} saved successfully");
             trackingExerciseController.ShowSessionCompleted();
+            PreparedSessionChanged?.Invoke();
         }
 
         private bool Fail(string message)
@@ -347,6 +363,7 @@ namespace EyeTraining.Sessions.Runtime
             CurrentExerciseIndex = -1;
             CurrentSessionNumber = 0;
             PendingSnapshot = null;
+            PreparedScheduleResult = null;
             activeProfile = null;
             currentStepResultReceived = false;
             skippedUnsupportedExercise = false;

@@ -38,7 +38,9 @@ namespace EyeTraining.UI
 
         private void ShowSessionMode()
         {
-            if (sessionRuntimeController != null && !sessionRuntimeController.PrepareSession())
+            if (sessionRuntimeController != null
+                && !sessionRuntimeController.HasPreparedSession
+                && !sessionRuntimeController.PrepareSession())
             {
                 return;
             }
