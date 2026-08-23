@@ -24,7 +24,7 @@ namespace EyeTraining.Exercises
             Completed
         }
 
-        private const float CycleCount = 1f;
+        private const float StandaloneCycleCount = 1f;
         private const float TargetViewportHeight = 76f / 1080f;
         private const float TrainingBoundsLineWidthInViewportHeight = 0.0015f;
         private const float IntroTransitionDuration = 0.325f;
@@ -86,6 +86,11 @@ namespace EyeTraining.Exercises
         private float runningTitleFontSize;
         private float runningInstructionFontSize;
         private float exerciseDuration;
+        private float activeCycleCount = StandaloneCycleCount;
+        private float activeSpeedMultiplier = 1f;
+        private TrackingPathVisibility activePathVisibility;
+        private string activeDisplayName;
+        private bool sessionManaged;
         private float remainingTime;
         private float lastBoundsOrthographicSize = -1f;
         private float lastBoundsTargetPlaneZ = float.NaN;
@@ -99,6 +104,8 @@ namespace EyeTraining.Exercises
         public TrackingExerciseResult LastResult { get; private set; }
 
         public event Action<TrackingExerciseResult> ResultReady;
+
+        public event Action ContinueRequested;
 
         private void Awake()
         {
@@ -165,6 +172,50 @@ namespace EyeTraining.Exercises
 
         public void Begin(SessionGuidanceMode guidanceMode)
         {
+            trackingPath = CreateTrackingPath();
+            activeDisplayName = null;
+            activeCycleCount = StandaloneCycleCount;
+            activeSpeedMultiplier = 1f;
+            sessionManaged = false;
+            BeginInternal(guidanceMode, pathVisibility);
+        }
+
+        public void Begin(
+            SessionGuidanceMode guidanceMode,
+            ITrackingPath path,
+            string displayName,
+            TrackingPathVisibility visibility,
+            float cycleCount,
+            float speedMultiplier)
+        {
+            trackingPath = path ?? throw new ArgumentNullException(nameof(path));
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                throw new ArgumentException("Display name cannot be empty.", nameof(displayName));
+            }
+
+            if (cycleCount <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(cycleCount));
+            }
+
+            if (speedMultiplier <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(speedMultiplier));
+            }
+
+            activeDisplayName = displayName;
+            activeCycleCount = cycleCount;
+            activeSpeedMultiplier = speedMultiplier;
+            sessionManaged = true;
+            BeginInternal(guidanceMode, visibility);
+        }
+
+        private void BeginInternal(
+            SessionGuidanceMode guidanceMode,
+            TrackingPathVisibility visibility)
+        {
+            activePathVisibility = visibility;
             GuidanceMode = guidanceMode;
             LastResult = null;
 
@@ -173,6 +224,7 @@ namespace EyeTraining.Exercises
             exerciseScreen.SetActive(true);
             exerciseWorld.SetActive(true);
             completionMessage.SetActive(false);
+            SetCompletionMessage("Ćwiczenie zakończone");
             nextButton.gameObject.SetActive(false);
             introStartButton.gameObject.SetActive(true);
             countdownText.gameObject.SetActive(false);
@@ -184,7 +236,9 @@ namespace EyeTraining.Exercises
             targetExtentsInViewport = GetTargetExtentsInViewport();
             float fullCycleLength = trackingPath.GetFullCycleLength(targetExtentsInViewport);
             exerciseDuration =
-                fullCycleLength / TrackingMotionSettings.LinearSpeed * CycleCount;
+                fullCycleLength
+                / (TrackingMotionSettings.LinearSpeed * activeSpeedMultiplier)
+                * activeCycleCount;
             remainingTime = exerciseDuration;
             ResetTargetPosition();
             targetRenderer.enabled = false;
@@ -251,7 +305,7 @@ namespace EyeTraining.Exercises
             trackingPathRenderer.Show(
                 trackingPath,
                 targetExtentsInViewport,
-                pathVisibility,
+                activePathVisibility,
                 target.position.z);
             UpdateTrainingBounds(true);
             Select(interruptButton.gameObject);
@@ -296,6 +350,12 @@ namespace EyeTraining.Exercises
 
         private void UpdateTitle()
         {
+            if (!string.IsNullOrEmpty(activeDisplayName))
+            {
+                titleText.text = activeDisplayName;
+                return;
+            }
+
             titleText.text = pathType switch
             {
                 TrackingPathType.Vertical => "Śledzenie pionowe",
@@ -360,8 +420,8 @@ namespace EyeTraining.Exercises
             remainingTime = 0f;
             UpdateTimer();
 
-            float roundedCycleCount = Mathf.Round(CycleCount);
-            double finalElapsedTime = Mathf.Approximately(CycleCount, roundedCycleCount)
+            float roundedCycleCount = Mathf.Round(activeCycleCount);
+            double finalElapsedTime = Mathf.Approximately(activeCycleCount, roundedCycleCount)
                 ? 0d
                 : exerciseDuration;
             UpdateTargetPosition(finalElapsedTime);
@@ -379,8 +439,8 @@ namespace EyeTraining.Exercises
                 ExerciseCompletionStatus.Interrupted,
                 ExerciseFeedback.None);
             LastResult = result;
-            ReturnHome();
             ResultReady?.Invoke(result);
+            ReturnHome();
         }
 
         private void SubmitEasyFeedback()
@@ -415,7 +475,19 @@ namespace EyeTraining.Exercises
 
         private void ReturnHome()
         {
+            if (sessionManaged && phase == ExercisePhase.Completed)
+            {
+                ContinueRequested?.Invoke();
+                return;
+            }
+
+            ExitToHome();
+        }
+
+        public void ExitToHome()
+        {
             phase = ExercisePhase.Inactive;
+            sessionManaged = false;
             StopIntroSequence();
             trainingBoundsRenderer.enabled = false;
             trackingPathRenderer.Hide();
@@ -430,6 +502,55 @@ namespace EyeTraining.Exercises
             ApplyRunningPresentation();
             homeScreen.SetActive(true);
             Select(startTrainingButton.gameObject);
+        }
+
+        public void ShowSessionCompleted()
+        {
+            sessionManaged = false;
+            phase = ExercisePhase.Completed;
+            trackingPathRenderer.Hide();
+            trainingBoundsRenderer.enabled = false;
+            targetRenderer.enabled = false;
+            feedbackPanel.SetActive(false);
+            timerText.gameObject.SetActive(false);
+            interruptButton.gameObject.SetActive(false);
+            titleText.gameObject.SetActive(false);
+            instructionText.gameObject.SetActive(false);
+            exerciseScreen.SetActive(true);
+            exerciseWorld.SetActive(false);
+            SetCompletionMessage("Trening zakończony");
+            completionMessage.SetActive(true);
+            nextButton.gameObject.SetActive(true);
+            Select(nextButton.gameObject);
+        }
+
+        public void ShowSessionError(string message)
+        {
+            sessionManaged = false;
+            phase = ExercisePhase.Completed;
+            trackingPathRenderer.Hide();
+            trainingBoundsRenderer.enabled = false;
+            targetRenderer.enabled = false;
+            feedbackPanel.SetActive(false);
+            timerText.gameObject.SetActive(false);
+            interruptButton.gameObject.SetActive(false);
+            titleText.gameObject.SetActive(false);
+            instructionText.gameObject.SetActive(false);
+            exerciseScreen.SetActive(true);
+            exerciseWorld.SetActive(false);
+            SetCompletionMessage(message);
+            completionMessage.SetActive(true);
+            nextButton.gameObject.SetActive(true);
+            Select(nextButton.gameObject);
+        }
+
+        private void SetCompletionMessage(string message)
+        {
+            TMP_Text messageText = completionMessage.GetComponentInChildren<TMP_Text>(true);
+            if (messageText != null)
+            {
+                messageText.text = message;
+            }
         }
 
         private void ResetTargetPosition()

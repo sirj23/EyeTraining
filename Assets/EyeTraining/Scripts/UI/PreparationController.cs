@@ -1,3 +1,4 @@
+using System;
 using EyeTraining.Core;
 using EyeTraining.Exercises;
 using TMPro;
@@ -33,6 +34,10 @@ namespace EyeTraining.UI
 
         public SessionGuidanceMode GuidanceMode { get; private set; }
 
+        public event Action Completed;
+
+        public event Action ReturnedToModeSelection;
+
         private void Awake()
         {
             nextButton.onClick.AddListener(GoNext);
@@ -66,7 +71,14 @@ namespace EyeTraining.UI
             }
 
             preparationScreen.SetActive(false);
-            trackingExerciseController.Begin(GuidanceMode);
+            if (Completed != null)
+            {
+                Completed.Invoke();
+            }
+            else
+            {
+                trackingExerciseController.Begin(GuidanceMode);
+            }
         }
 
         private void GoBack()
@@ -80,6 +92,7 @@ namespace EyeTraining.UI
 
             preparationScreen.SetActive(false);
             sessionModeScreen.SetActive(true);
+            ReturnedToModeSelection?.Invoke();
             Select(defaultModeButton.gameObject);
         }
 
