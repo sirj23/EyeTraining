@@ -1,5 +1,7 @@
+using System;
 using System.Collections;
 using EyeTraining.Core;
+using EyeTraining.Sessions.Progression.Tracking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -17,6 +19,7 @@ namespace EyeTraining.Exercises
             Transition,
             Countdown,
             Running,
+            Feedback,
             Completed
         }
 
@@ -66,6 +69,11 @@ namespace EyeTraining.Exercises
         private LineRenderer trainingBoundsRenderer;
         private TMP_Text countdownText;
         private Button introStartButton;
+        private GameObject feedbackPanel;
+        private Button easyFeedbackButton;
+        private Button comfortableFeedbackButton;
+        private Button difficultFeedbackButton;
+        private Button skipFeedbackButton;
         private RectTransform titleRectTransform;
         private RectTransform instructionRectTransform;
         private Coroutine introSequence;
@@ -87,6 +95,10 @@ namespace EyeTraining.Exercises
 
         public SessionGuidanceMode GuidanceMode { get; private set; }
 
+        public TrackingExerciseResult LastResult { get; private set; }
+
+        public event Action<TrackingExerciseResult> ResultReady;
+
         private void Awake()
         {
             trackingPath = CreateTrackingPath();
@@ -98,8 +110,13 @@ namespace EyeTraining.Exercises
                 targetRenderer.sortingLayerID,
                 targetRenderer.sortingOrder - 1);
             CreateIntroControls();
+            CreateFeedbackControls();
             CacheRunningPresentation();
             introStartButton.onClick.AddListener(StartIntroSequence);
+            easyFeedbackButton.onClick.AddListener(SubmitEasyFeedback);
+            comfortableFeedbackButton.onClick.AddListener(SubmitComfortableFeedback);
+            difficultFeedbackButton.onClick.AddListener(SubmitDifficultFeedback);
+            skipFeedbackButton.onClick.AddListener(SkipFeedback);
             interruptButton.onClick.AddListener(Interrupt);
             nextButton.onClick.AddListener(ReturnHome);
             exerciseScreen.SetActive(false);
@@ -109,6 +126,10 @@ namespace EyeTraining.Exercises
         private void OnDestroy()
         {
             introStartButton.onClick.RemoveListener(StartIntroSequence);
+            easyFeedbackButton.onClick.RemoveListener(SubmitEasyFeedback);
+            comfortableFeedbackButton.onClick.RemoveListener(SubmitComfortableFeedback);
+            difficultFeedbackButton.onClick.RemoveListener(SubmitDifficultFeedback);
+            skipFeedbackButton.onClick.RemoveListener(SkipFeedback);
             interruptButton.onClick.RemoveListener(Interrupt);
             nextButton.onClick.RemoveListener(ReturnHome);
         }
@@ -144,6 +165,7 @@ namespace EyeTraining.Exercises
         public void Begin(SessionGuidanceMode guidanceMode)
         {
             GuidanceMode = guidanceMode;
+            LastResult = null;
 
             StopIntroSequence();
 
@@ -153,6 +175,7 @@ namespace EyeTraining.Exercises
             nextButton.gameObject.SetActive(false);
             introStartButton.gameObject.SetActive(true);
             countdownText.gameObject.SetActive(false);
+            feedbackPanel.SetActive(false);
             timerText.gameObject.SetActive(false);
             interruptButton.gameObject.SetActive(false);
             UpdateTitle();
@@ -165,6 +188,8 @@ namespace EyeTraining.Exercises
             ResetTargetPosition();
             targetRenderer.enabled = false;
             trackingPathRenderer.Hide();
+            titleText.gameObject.SetActive(true);
+            instructionText.gameObject.SetActive(true);
             ApplyIntroPresentation();
             phase = ExercisePhase.Intro;
             UpdateTimer();
@@ -297,15 +322,36 @@ namespace EyeTraining.Exercises
             };
         }
 
-        private void Complete()
+        private void EnterFeedback()
         {
-            phase = ExercisePhase.Completed;
+            phase = ExercisePhase.Feedback;
             trainingBoundsRenderer.enabled = false;
             trackingPathRenderer.Hide();
+            targetRenderer.enabled = false;
+            timerText.gameObject.SetActive(false);
+            interruptButton.gameObject.SetActive(false);
+            completionMessage.SetActive(false);
+            nextButton.gameObject.SetActive(false);
+            titleText.gameObject.SetActive(false);
+            instructionText.gameObject.SetActive(false);
+            feedbackPanel.SetActive(true);
+            Select(comfortableFeedbackButton.gameObject);
+        }
+
+        private void Complete(ExerciseFeedback feedback)
+        {
+            phase = ExercisePhase.Completed;
+            LastResult = new TrackingExerciseResult(
+                ExerciseCompletionStatus.Completed,
+                feedback);
+            trainingBoundsRenderer.enabled = false;
+            trackingPathRenderer.Hide();
+            feedbackPanel.SetActive(false);
             completionMessage.SetActive(true);
             interruptButton.gameObject.SetActive(false);
             nextButton.gameObject.SetActive(true);
             Select(nextButton.gameObject);
+            ResultReady?.Invoke(LastResult);
         }
 
         private void CompleteAtCycleEnd()
@@ -318,12 +364,52 @@ namespace EyeTraining.Exercises
                 ? 0d
                 : exerciseDuration;
             UpdateTargetPosition(finalElapsedTime);
-            Complete();
+            EnterFeedback();
         }
 
         private void Interrupt()
         {
+            if (phase != ExercisePhase.Running)
+            {
+                return;
+            }
+
+            TrackingExerciseResult result = new TrackingExerciseResult(
+                ExerciseCompletionStatus.Interrupted,
+                ExerciseFeedback.None);
+            LastResult = result;
             ReturnHome();
+            ResultReady?.Invoke(result);
+        }
+
+        private void SubmitEasyFeedback()
+        {
+            SubmitFeedback(ExerciseFeedback.Easy);
+        }
+
+        private void SubmitComfortableFeedback()
+        {
+            SubmitFeedback(ExerciseFeedback.Comfortable);
+        }
+
+        private void SubmitDifficultFeedback()
+        {
+            SubmitFeedback(ExerciseFeedback.Difficult);
+        }
+
+        private void SkipFeedback()
+        {
+            SubmitFeedback(ExerciseFeedback.None);
+        }
+
+        private void SubmitFeedback(ExerciseFeedback feedback)
+        {
+            if (phase != ExercisePhase.Feedback)
+            {
+                return;
+            }
+
+            Complete(feedback);
         }
 
         private void ReturnHome()
@@ -335,6 +421,9 @@ namespace EyeTraining.Exercises
             targetRenderer.enabled = false;
             introStartButton.gameObject.SetActive(false);
             countdownText.gameObject.SetActive(false);
+            feedbackPanel.SetActive(false);
+            titleText.gameObject.SetActive(true);
+            instructionText.gameObject.SetActive(true);
             exerciseScreen.SetActive(false);
             exerciseWorld.SetActive(false);
             ApplyRunningPresentation();
@@ -446,6 +535,181 @@ namespace EyeTraining.Exercises
 
             buttonObject.SetActive(false);
             countdownObject.SetActive(false);
+        }
+
+        private void CreateFeedbackControls()
+        {
+            feedbackPanel = new GameObject("Feedback Panel", typeof(RectTransform));
+            feedbackPanel.layer = exerciseScreen.layer;
+            feedbackPanel.transform.SetParent(exerciseScreen.transform, false);
+
+            RectTransform panelRectTransform = (RectTransform)feedbackPanel.transform;
+            panelRectTransform.anchorMin = Vector2.zero;
+            panelRectTransform.anchorMax = Vector2.one;
+            panelRectTransform.anchoredPosition = Vector2.zero;
+            panelRectTransform.sizeDelta = Vector2.zero;
+
+            GameObject headingObject = new(
+                "Heading",
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(TextMeshProUGUI));
+            headingObject.layer = exerciseScreen.layer;
+            headingObject.transform.SetParent(feedbackPanel.transform, false);
+
+            RectTransform headingRectTransform = (RectTransform)headingObject.transform;
+            headingRectTransform.anchorMin = new Vector2(0.28f, 0.59f);
+            headingRectTransform.anchorMax = new Vector2(0.72f, 0.70f);
+            headingRectTransform.anchoredPosition = Vector2.zero;
+            headingRectTransform.sizeDelta = Vector2.zero;
+
+            TMP_Text headingText = headingObject.GetComponent<TMP_Text>();
+            headingText.font = titleText.font;
+            headingText.fontSize = 52f;
+            headingText.fontStyle = FontStyles.Bold;
+            headingText.alignment = TextAlignmentOptions.Center;
+            headingText.color = IntroTitleColor;
+            headingText.raycastTarget = false;
+            headingText.text = "Jak było?";
+
+            easyFeedbackButton = CreateFeedbackButton(
+                "Easy Button",
+                "Za łatwe",
+                new Vector2(0.16f, 0.38f),
+                new Vector2(0.38f, 0.50f),
+                30f,
+                false);
+            comfortableFeedbackButton = CreateFeedbackButton(
+                "Comfortable Button",
+                "W sam raz",
+                new Vector2(0.39f, 0.38f),
+                new Vector2(0.61f, 0.50f),
+                30f,
+                false);
+            difficultFeedbackButton = CreateFeedbackButton(
+                "Difficult Button",
+                "Trudne",
+                new Vector2(0.62f, 0.38f),
+                new Vector2(0.84f, 0.50f),
+                30f,
+                false);
+            skipFeedbackButton = CreateFeedbackButton(
+                "Skip Button",
+                "Pomiń ocenę",
+                new Vector2(0.41f, 0.23f),
+                new Vector2(0.59f, 0.31f),
+                24f,
+                true);
+
+            ConfigureFeedbackNavigation();
+            feedbackPanel.SetActive(false);
+        }
+
+        private Button CreateFeedbackButton(
+            string objectName,
+            string label,
+            Vector2 anchorMin,
+            Vector2 anchorMax,
+            float fontSize,
+            bool secondary)
+        {
+            GameObject buttonObject = new(
+                objectName,
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(Image),
+                typeof(Button));
+            buttonObject.layer = exerciseScreen.layer;
+            buttonObject.transform.SetParent(feedbackPanel.transform, false);
+
+            RectTransform buttonRectTransform = (RectTransform)buttonObject.transform;
+            buttonRectTransform.anchorMin = anchorMin;
+            buttonRectTransform.anchorMax = anchorMax;
+            buttonRectTransform.anchoredPosition = Vector2.zero;
+            buttonRectTransform.sizeDelta = Vector2.zero;
+
+            Image buttonImage = buttonObject.GetComponent<Image>();
+            buttonImage.color = secondary
+                ? new Color(0.13f, 0.18f, 0.25f, 0.92f)
+                : new Color(0.16f, 0.25f, 0.36f, 1f);
+
+            Button button = buttonObject.GetComponent<Button>();
+            button.targetGraphic = buttonImage;
+            ColorBlock colors = button.colors;
+            colors.highlightedColor = secondary
+                ? new Color(0.25f, 0.32f, 0.41f, 1f)
+                : new Color(0.31f, 0.43f, 0.56f, 1f);
+            colors.selectedColor = colors.highlightedColor;
+            colors.pressedColor = new Color(0.22f, 0.34f, 0.47f, 1f);
+            colors.fadeDuration = 0.1f;
+            button.colors = colors;
+
+            GameObject labelObject = new(
+                "Label",
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(TextMeshProUGUI));
+            labelObject.layer = exerciseScreen.layer;
+            labelObject.transform.SetParent(buttonObject.transform, false);
+
+            RectTransform labelRectTransform = (RectTransform)labelObject.transform;
+            labelRectTransform.anchorMin = Vector2.zero;
+            labelRectTransform.anchorMax = Vector2.one;
+            labelRectTransform.anchoredPosition = Vector2.zero;
+            labelRectTransform.sizeDelta = new Vector2(-28f, -14f);
+
+            TMP_Text labelText = labelObject.GetComponent<TMP_Text>();
+            labelText.font = titleText.font;
+            labelText.fontSize = fontSize;
+            labelText.fontStyle = secondary ? FontStyles.Normal : FontStyles.Bold;
+            labelText.alignment = TextAlignmentOptions.Center;
+            labelText.color = secondary
+                ? new Color(0.75f, 0.80f, 0.86f, 1f)
+                : new Color(0.94f, 0.96f, 0.99f, 1f);
+            labelText.raycastTarget = false;
+            labelText.text = label;
+
+            return button;
+        }
+
+        private void ConfigureFeedbackNavigation()
+        {
+            easyFeedbackButton.navigation = CreateNavigation(
+                null,
+                comfortableFeedbackButton,
+                null,
+                skipFeedbackButton);
+            comfortableFeedbackButton.navigation = CreateNavigation(
+                easyFeedbackButton,
+                difficultFeedbackButton,
+                null,
+                skipFeedbackButton);
+            difficultFeedbackButton.navigation = CreateNavigation(
+                comfortableFeedbackButton,
+                null,
+                null,
+                skipFeedbackButton);
+            skipFeedbackButton.navigation = CreateNavigation(
+                easyFeedbackButton,
+                difficultFeedbackButton,
+                comfortableFeedbackButton,
+                null);
+        }
+
+        private static Navigation CreateNavigation(
+            Selectable left,
+            Selectable right,
+            Selectable up,
+            Selectable down)
+        {
+            return new Navigation
+            {
+                mode = Navigation.Mode.Explicit,
+                selectOnLeft = left,
+                selectOnRight = right,
+                selectOnUp = up,
+                selectOnDown = down
+            };
         }
 
         private void ApplyIntroPresentation()
