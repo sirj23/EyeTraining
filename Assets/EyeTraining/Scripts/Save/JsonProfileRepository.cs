@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using EyeTraining.Exercises.Landolt;
 using EyeTraining.Profiles;
 using UnityEngine;
 
@@ -8,7 +9,8 @@ namespace EyeTraining.Save
 {
     public sealed class JsonProfileRepository : IProfileRepository
     {
-        private const int CurrentFormatVersion = 1;
+        private const int CurrentFormatVersion = 2;
+        private const int MinimumSupportedFormatVersion = 1;
         private const string FileName = "profiles.json";
 
         private readonly string _filePath;
@@ -37,7 +39,16 @@ namespace EyeTraining.Save
                 return false;
             }
 
-            profiles.Add(profile);
+            int existingIndex = profiles.FindIndex(savedProfile =>
+                string.Equals(savedProfile.Id, profile.Id, StringComparison.Ordinal));
+            if (existingIndex >= 0)
+            {
+                profiles[existingIndex] = profile;
+            }
+            else
+            {
+                profiles.Add(profile);
+            }
 
             try
             {
@@ -87,6 +98,13 @@ namespace EyeTraining.Save
                     throw new InvalidDataException("Plik nie zawiera prawidłowej listy profili.");
                 }
 
+                if (fileData.version < MinimumSupportedFormatVersion
+                    || fileData.version > CurrentFormatVersion)
+                {
+                    throw new InvalidDataException(
+                        $"Nieobsługiwana wersja pliku profili: {fileData.version}.");
+                }
+
                 foreach (ProfileRecord record in fileData.profiles)
                 {
                     if (record == null ||
@@ -122,6 +140,7 @@ namespace EyeTraining.Save
             public string id;
             public string displayName;
             public string category;
+            public string landoltBackgroundMode;
 
             public static ProfileRecord FromProfile(UserProfile profile)
             {
@@ -129,7 +148,8 @@ namespace EyeTraining.Save
                 {
                     id = profile.Id,
                     displayName = profile.DisplayName,
-                    category = profile.Category.ToString()
+                    category = profile.Category.ToString(),
+                    landoltBackgroundMode = profile.LandoltBackgroundMode.ToString()
                 };
             }
 
@@ -141,7 +161,22 @@ namespace EyeTraining.Save
                     throw new InvalidDataException($"Nieznana kategoria profilu: '{category}'.");
                 }
 
-                return new UserProfile(id, displayName, parsedCategory);
+                LandoltBackgroundMode parsedBackgroundMode = LandoltBackgroundMode.Dark;
+                if (!string.IsNullOrEmpty(landoltBackgroundMode)
+                    && (!Enum.TryParse(landoltBackgroundMode, out parsedBackgroundMode)
+                        || !Enum.IsDefined(
+                            typeof(LandoltBackgroundMode),
+                            parsedBackgroundMode)))
+                {
+                    throw new InvalidDataException(
+                        $"Nieznany tryb tła Landolta: '{landoltBackgroundMode}'.");
+                }
+
+                return new UserProfile(
+                    id,
+                    displayName,
+                    parsedCategory,
+                    parsedBackgroundMode);
             }
         }
     }

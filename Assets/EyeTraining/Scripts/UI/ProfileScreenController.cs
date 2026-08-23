@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using EyeTraining.Exercises.Landolt;
 using EyeTraining.Profiles;
 using EyeTraining.Save;
 using EyeTraining.Sessions.History;
@@ -51,6 +52,12 @@ namespace EyeTraining.UI
         private ProfileCategory? _selectedCategory;
         private TMP_Text _homeTrainingDay;
         private TMP_Text _homePlan;
+        private GameObject _profilePreferencesPanel;
+        private Button _profilePreferencesButton;
+        private Button _darkBackgroundButton;
+        private Button _lightBackgroundButton;
+        private Button _preferencesBackButton;
+        private TMP_Text _preferencesMessage;
 
         public UserProfile ActiveProfile { get; private set; }
 
@@ -69,6 +76,7 @@ namespace EyeTraining.UI
         private void OnDestroy()
         {
             UnbindActions();
+            UnbindPreferenceActions();
             if (sessionRuntimeController != null)
             {
                 sessionRuntimeController.PreparedSessionChanged -= RefreshHome;
@@ -101,8 +109,9 @@ namespace EyeTraining.UI
 
         private void ShowProfileSelection()
         {
+            _profilePreferencesPanel?.SetActive(false);
             ActiveProfile = null;
-            sessionRuntimeController?.AbortSession();
+            sessionRuntimeController?.ClearPreparedSession();
             addProfileScreen.SetActive(false);
             homeScreen.SetActive(false);
             profileSelectionScreen.SetActive(true);
@@ -148,6 +157,7 @@ namespace EyeTraining.UI
         private void ShowHome(UserProfile profile)
         {
             ActiveProfile = profile;
+            _profilePreferencesPanel.SetActive(false);
             homeProfileName.text = profile.DisplayName;
 
             // Wartości demonstracyjne UI. Nie są częścią modelu profilu ani systemu XP.
@@ -161,6 +171,88 @@ namespace EyeTraining.UI
             homeScreen.SetActive(true);
             RefreshHome();
             Select(startTrainingButton.gameObject);
+        }
+
+        private void ShowProfilePreferences()
+        {
+            if (ActiveProfile == null)
+            {
+                return;
+            }
+
+            _preferencesMessage.text = string.Empty;
+            RefreshBackgroundModeSelection();
+            _profilePreferencesPanel.SetActive(true);
+            Select(ActiveProfile.LandoltBackgroundMode == LandoltBackgroundMode.Dark
+                ? _darkBackgroundButton.gameObject
+                : _lightBackgroundButton.gameObject);
+        }
+
+        private void HideProfilePreferences()
+        {
+            _profilePreferencesPanel.SetActive(false);
+            Select(_profilePreferencesButton.gameObject);
+        }
+
+        private void SelectDarkBackground()
+        {
+            SaveLandoltBackgroundMode(LandoltBackgroundMode.Dark);
+        }
+
+        private void SelectLightBackground()
+        {
+            SaveLandoltBackgroundMode(LandoltBackgroundMode.Light);
+        }
+
+        private void SaveLandoltBackgroundMode(LandoltBackgroundMode mode)
+        {
+            if (ActiveProfile == null || ActiveProfile.LandoltBackgroundMode == mode)
+            {
+                RefreshBackgroundModeSelection();
+                return;
+            }
+
+            UserProfile previousProfile = ActiveProfile;
+            var updatedProfile = new UserProfile(
+                previousProfile.Id,
+                previousProfile.DisplayName,
+                previousProfile.Category,
+                mode);
+            if (!_profileRepository.Save(updatedProfile))
+            {
+                ActiveProfile = previousProfile;
+                _preferencesMessage.text = "Nie udało się zapisać ustawienia.";
+                RefreshBackgroundModeSelection();
+                Debug.LogError(
+                    $"Nie udało się zapisać preferencji Landolta dla profilu "
+                    + $"'{previousProfile.Id}'.");
+                return;
+            }
+
+            ActiveProfile = updatedProfile;
+            sessionRuntimeController?.UpdatePreparedProfile(updatedProfile);
+            _preferencesMessage.text = string.Empty;
+            RefreshBackgroundModeSelection();
+        }
+
+        private void RefreshBackgroundModeSelection()
+        {
+            bool dark = ActiveProfile?.LandoltBackgroundMode == LandoltBackgroundMode.Dark;
+            SetPreferenceButtonState(_darkBackgroundButton, "Ciemne", dark);
+            SetPreferenceButtonState(_lightBackgroundButton, "Jasne", !dark);
+        }
+
+        private static void SetPreferenceButtonState(
+            Button button,
+            string label,
+            bool selected)
+        {
+            button.GetComponentInChildren<TMP_Text>().text = selected
+                ? $"{label} (wybrane)"
+                : label;
+            button.GetComponent<Image>().color = selected
+                ? new Color(0.24f, 0.42f, 0.53f, 1f)
+                : new Color(0.18f, 0.25f, 0.34f, 1f);
         }
 
         public void RefreshHome()
@@ -222,6 +314,115 @@ namespace EyeTraining.UI
             _homePlan.alignment = TextAlignmentOptions.TopLeft;
             _homePlan.textWrappingMode = TextWrappingModes.Normal;
             ConfigureRect(_homePlan.rectTransform, 0.20f, 0.30f, 0.80f, 0.50f);
+
+            CreateProfilePreferencesPresentation();
+        }
+
+        private void CreateProfilePreferencesPresentation()
+        {
+            _profilePreferencesButton = Instantiate(changeProfileButton, homeScreen.transform);
+            _profilePreferencesButton.name = "Profile Preferences";
+            _profilePreferencesButton.GetComponentInChildren<TMP_Text>().text =
+                "Ustawienia profilu";
+            ConfigureButtonRect(
+                _profilePreferencesButton.GetComponent<RectTransform>(),
+                new Vector2(0.84f, 0.88f),
+                new Vector2(230f, 58f));
+
+            _profilePreferencesPanel = new GameObject(
+                "Profile Preferences Panel",
+                typeof(RectTransform),
+                typeof(Image));
+            _profilePreferencesPanel.transform.SetParent(homeScreen.transform, false);
+            RectTransform panelRect =
+                (RectTransform)_profilePreferencesPanel.transform;
+            ConfigureRect(panelRect, 0.20f, 0.20f, 0.80f, 0.80f);
+            _profilePreferencesPanel.GetComponent<Image>().color =
+                new Color(0.035f, 0.055f, 0.085f, 0.98f);
+            _profilePreferencesPanel.transform.SetAsLastSibling();
+
+            TMP_Text title = Instantiate(homeRankName, _profilePreferencesPanel.transform);
+            title.name = "Preferences Title";
+            title.text = "Landolt C";
+            title.fontSize = 42f;
+            title.alignment = TextAlignmentOptions.Center;
+            ConfigureRect(title.rectTransform, 0.15f, 0.72f, 0.85f, 0.88f);
+
+            TMP_Text label = Instantiate(homeRankName, _profilePreferencesPanel.transform);
+            label.name = "Background Mode Label";
+            label.text = "Tło ćwiczenia";
+            label.fontSize = 28f;
+            label.alignment = TextAlignmentOptions.Center;
+            ConfigureRect(label.rectTransform, 0.15f, 0.57f, 0.85f, 0.68f);
+
+            _darkBackgroundButton = CreatePreferenceButton(
+                "Dark Background",
+                "Ciemne",
+                new Vector2(0.36f, 0.45f));
+            _lightBackgroundButton = CreatePreferenceButton(
+                "Light Background",
+                "Jasne",
+                new Vector2(0.64f, 0.45f));
+            _preferencesBackButton = CreatePreferenceButton(
+                "Preferences Back",
+                "Wróć",
+                new Vector2(0.5f, 0.20f));
+
+            _preferencesMessage = Instantiate(
+                homeRankName,
+                _profilePreferencesPanel.transform);
+            _preferencesMessage.name = "Preferences Message";
+            _preferencesMessage.text = string.Empty;
+            _preferencesMessage.fontSize = 22f;
+            _preferencesMessage.alignment = TextAlignmentOptions.Center;
+            ConfigureRect(
+                _preferencesMessage.rectTransform,
+                0.10f,
+                0.29f,
+                0.90f,
+                0.36f);
+
+            _profilePreferencesButton.onClick.AddListener(ShowProfilePreferences);
+            _darkBackgroundButton.onClick.AddListener(SelectDarkBackground);
+            _lightBackgroundButton.onClick.AddListener(SelectLightBackground);
+            _preferencesBackButton.onClick.AddListener(HideProfilePreferences);
+            _profilePreferencesPanel.SetActive(false);
+        }
+
+        private Button CreatePreferenceButton(string name, string label, Vector2 anchor)
+        {
+            Button button = Instantiate(
+                changeProfileButton,
+                _profilePreferencesPanel.transform);
+            button.name = name;
+            TMP_Text text = button.GetComponentInChildren<TMP_Text>();
+            text.text = label;
+            text.fontSize = 26f;
+            ConfigureButtonRect(
+                button.GetComponent<RectTransform>(),
+                anchor,
+                new Vector2(210f, 72f));
+            return button;
+        }
+
+        private static void ConfigureButtonRect(
+            RectTransform rectTransform,
+            Vector2 anchor,
+            Vector2 size)
+        {
+            rectTransform.anchorMin = anchor;
+            rectTransform.anchorMax = anchor;
+            rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            rectTransform.anchoredPosition = Vector2.zero;
+            rectTransform.sizeDelta = size;
+        }
+
+        private void UnbindPreferenceActions()
+        {
+            _profilePreferencesButton?.onClick.RemoveListener(ShowProfilePreferences);
+            _darkBackgroundButton?.onClick.RemoveListener(SelectDarkBackground);
+            _lightBackgroundButton?.onClick.RemoveListener(SelectLightBackground);
+            _preferencesBackButton?.onClick.RemoveListener(HideProfilePreferences);
         }
 
         private static void ConfigureRect(

@@ -41,10 +41,11 @@ namespace EyeTraining.Exercises.Landolt
         [SerializeField] private Button buttonTemplate;
         [SerializeField] private Button homeStartTrainingButton;
 
-        [Header("Preferences")]
-        [SerializeField] private LandoltBackgroundMode backgroundMode = LandoltBackgroundMode.Dark;
-
         [Header("Debug")]
+        [Tooltip("Gdy włączone, ignoruje preferencję aktywnego profilu.")]
+        [SerializeField] private bool debugOverrideBackgroundMode;
+        [SerializeField] private LandoltBackgroundMode debugBackgroundMode =
+            LandoltBackgroundMode.Dark;
         [Range(0, LandoltLevelPlan.MaximumLevel)]
         [SerializeField] private int debugStartLevel;
         [SerializeField] private bool debugFixedDirection;
@@ -70,6 +71,7 @@ namespace EyeTraining.Exercises.Landolt
         private ExercisePhase phase;
         private bool sessionManaged;
         private int deterministicSeed;
+        private LandoltBackgroundMode activeBackgroundMode = LandoltBackgroundMode.Dark;
 
         public LandoltExerciseResult LastResult { get; private set; }
         public event Action<LandoltExerciseResult> ResultReady;
@@ -131,16 +133,27 @@ namespace EyeTraining.Exercises.Landolt
             }
         }
 
-        public void Begin(SessionGuidanceMode guidanceMode, int sessionNumber)
+        public void Begin(
+            SessionGuidanceMode guidanceMode,
+            int sessionNumber,
+            LandoltBackgroundMode preferredBackgroundMode)
         {
             if (sessionNumber <= 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(sessionNumber));
             }
 
+            if (!Enum.IsDefined(typeof(LandoltBackgroundMode), preferredBackgroundMode))
+            {
+                throw new ArgumentOutOfRangeException(nameof(preferredBackgroundMode));
+            }
+
             _ = guidanceMode;
             sessionManaged = true;
             deterministicSeed = sessionNumber;
+            activeBackgroundMode = debugOverrideBackgroundMode
+                ? debugBackgroundMode
+                : preferredBackgroundMode;
             LastResult = null;
             StopSequence();
             trackingExerciseScreen.SetActive(false);
@@ -274,7 +287,7 @@ namespace EyeTraining.Exercises.Landolt
                 round?.ExposureCount ?? 0,
                 round?.HighestLevel ?? debugStartLevel,
                 round?.CurrentLevel ?? debugStartLevel,
-                backgroundMode,
+                activeBackgroundMode,
                 LandoltDirectionMode.FourDirections);
         }
 
@@ -309,7 +322,7 @@ namespace EyeTraining.Exercises.Landolt
 
         private void ApplyTheme()
         {
-            bool dark = backgroundMode == LandoltBackgroundMode.Dark;
+            bool dark = activeBackgroundMode == LandoltBackgroundMode.Dark;
             background.color = dark ? DarkBackground : LightBackground;
             Color foreground = dark ? DarkSymbol : LightSymbol;
             ring.color = foreground;

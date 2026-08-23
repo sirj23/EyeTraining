@@ -117,6 +117,7 @@ namespace EyeTraining.Sessions.Runtime
                 && CurrentPlan != null
                 && string.Equals(activeProfile?.Id, profile.Id, StringComparison.Ordinal))
             {
+                activeProfile = profile;
                 return true;
             }
 
@@ -161,6 +162,27 @@ namespace EyeTraining.Sessions.Runtime
             }
         }
 
+        public void UpdatePreparedProfile(UserProfile profile)
+        {
+            if (profile == null)
+            {
+                throw new ArgumentNullException(nameof(profile));
+            }
+
+            if (activeProfile == null)
+            {
+                return;
+            }
+
+            if (!string.Equals(activeProfile.Id, profile.Id, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Cannot update a prepared session with a different profile.");
+            }
+
+            activeProfile = profile;
+        }
+
         public void StartPreparedSession(SessionGuidanceMode selectedGuidanceMode)
         {
             if (Phase != SessionRuntimePhase.Prepared)
@@ -188,7 +210,10 @@ namespace EyeTraining.Sessions.Runtime
             CurrentPlannedExercise = null;
             Phase = SessionRuntimePhase.RunningExercise;
             Debug.Log("[SessionRuntime] Development mode: starting Landolt only; persistence disabled.");
-            landoltExerciseController.Begin(guidanceMode, CurrentSessionNumber);
+            landoltExerciseController.Begin(
+                guidanceMode,
+                CurrentSessionNumber,
+                GetActiveLandoltBackgroundMode());
         }
 
         public void AbortSession()
@@ -202,6 +227,21 @@ namespace EyeTraining.Sessions.Runtime
             ClearPendingSession();
             Debug.LogWarning("[SessionRuntime] Session aborted. Pending history was discarded.");
             PreparedSessionChanged?.Invoke();
+        }
+
+        public void ClearPreparedSession()
+        {
+            if (Phase == SessionRuntimePhase.Preparing
+                || Phase == SessionRuntimePhase.RunningExercise
+                || Phase == SessionRuntimePhase.WaitingForContinue
+                || Phase == SessionRuntimePhase.Completing)
+            {
+                throw new InvalidOperationException(
+                    "An active session must be aborted instead of clearing its prepared plan.");
+            }
+
+            ClearPendingSession();
+            Phase = SessionRuntimePhase.Inactive;
         }
 
         private void AdvanceToNextExercise()
@@ -293,7 +333,21 @@ namespace EyeTraining.Sessions.Runtime
         {
             Phase = SessionRuntimePhase.RunningExercise;
             Debug.Log("[SessionRuntime] Starting: " + CurrentPlannedExercise.Definition.Id);
-            landoltExerciseController.Begin(guidanceMode, CurrentSessionNumber);
+            landoltExerciseController.Begin(
+                guidanceMode,
+                CurrentSessionNumber,
+                GetActiveLandoltBackgroundMode());
+        }
+
+        private LandoltBackgroundMode GetActiveLandoltBackgroundMode()
+        {
+            if (activeProfile == null)
+            {
+                throw new InvalidOperationException(
+                    "A session cannot start Landolt without an active profile.");
+            }
+
+            return activeProfile.LandoltBackgroundMode;
         }
 
         private void HandlePreparationCompleted()
