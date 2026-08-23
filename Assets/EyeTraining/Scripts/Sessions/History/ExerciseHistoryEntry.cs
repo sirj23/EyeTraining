@@ -1,17 +1,23 @@
 using System;
-using EyeTraining.Sessions.History;
 
-namespace EyeTraining.Sessions.Progression.Tracking
+namespace EyeTraining.Sessions.History
 {
-    public sealed class TrackingProgressionEntry
+    public sealed class ExerciseHistoryEntry
     {
-        public TrackingProgressionEntry(
+        public ExerciseHistoryEntry(
+            string profileId,
             string exerciseId,
             int completedSessionNumber,
-            int appliedLevel,
+            int? appliedLevel,
             ExerciseCompletionStatus completionStatus,
-            ExerciseFeedback feedback)
+            ExerciseFeedback feedback,
+            DateTimeOffset completedAt)
         {
+            if (string.IsNullOrWhiteSpace(profileId))
+            {
+                throw new ArgumentException("Profile id cannot be empty.", nameof(profileId));
+            }
+
             if (string.IsNullOrWhiteSpace(exerciseId))
             {
                 throw new ArgumentException("Exercise id cannot be empty.", nameof(exerciseId));
@@ -22,7 +28,7 @@ namespace EyeTraining.Sessions.Progression.Tracking
                 throw new ArgumentOutOfRangeException(nameof(completedSessionNumber));
             }
 
-            if (appliedLevel < 0)
+            if (appliedLevel.HasValue && appliedLevel.Value < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(appliedLevel));
             }
@@ -37,21 +43,40 @@ namespace EyeTraining.Sessions.Progression.Tracking
                 throw new ArgumentOutOfRangeException(nameof(feedback));
             }
 
+            if (completionStatus == ExerciseCompletionStatus.Interrupted
+                && feedback != ExerciseFeedback.None)
+            {
+                throw new ArgumentException(
+                    "An interrupted exercise cannot contain completion feedback.",
+                    nameof(feedback));
+            }
+
+            if (completedAt == default)
+            {
+                throw new ArgumentOutOfRangeException(nameof(completedAt));
+            }
+
+            ProfileId = profileId;
             ExerciseId = exerciseId;
             CompletedSessionNumber = completedSessionNumber;
             AppliedLevel = appliedLevel;
             CompletionStatus = completionStatus;
             Feedback = feedback;
+            CompletedAt = completedAt;
         }
+
+        public string ProfileId { get; }
 
         public string ExerciseId { get; }
 
         public int CompletedSessionNumber { get; }
 
-        public int AppliedLevel { get; }
+        public int? AppliedLevel { get; }
 
         public ExerciseCompletionStatus CompletionStatus { get; }
 
         public ExerciseFeedback Feedback { get; }
+
+        public DateTimeOffset CompletedAt { get; }
     }
 }

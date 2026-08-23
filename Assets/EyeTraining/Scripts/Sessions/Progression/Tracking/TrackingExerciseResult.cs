@@ -1,4 +1,5 @@
 using System;
+using EyeTraining.Sessions.History;
 
 namespace EyeTraining.Sessions.Progression.Tracking
 {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using EyeTraining.Core;
+using EyeTraining.Sessions.History;
 using EyeTraining.Sessions.Progression.Tracking;
 using TMPro;
 using UnityEngine;

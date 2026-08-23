@@ -1,4 +1,4 @@
-namespace EyeTraining.Sessions.Progression.Tracking
+namespace EyeTraining.Sessions.History
 {
     public enum ExerciseFeedback
     {
