@@ -394,6 +394,7 @@ GameObject:
   - component: {fileID: 200007}
   - component: {fileID: 200008}
   - component: {fileID: 200009}
+  - component: {fileID: 200010}
   m_Layer: 0
   m_Name: App
   m_TagString: Untagged
@@ -548,6 +549,7 @@ MonoBehaviour:
   trackingExerciseController: {fileID: 200006}
   landoltExerciseController: {fileID: 200008}
   numberJourneyController: {fileID: 200009}
+  shapeSearchController: {fileID: 200010}
   debugMode: 0
   skipUnsupportedExercisesInDevelopment: 1
 --- !u!114 &200008
@@ -593,6 +595,26 @@ MonoBehaviour:
   homeStartTrainingButton: {fileID: 1086314225}
   debugSequenceSeed: 1
   debugShowSequence: 0
+--- !u!114 &200010
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 200000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b5ab88a7c75441969d234f39add9fb29, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::EyeTraining.Exercises.VisualSearch.ShapeSearchController
+  canvas: {fileID: 746076483}
+  homeScreen: {fileID: 1535237442}
+  trackingExerciseScreen: {fileID: 1601454828}
+  textTemplate: {fileID: 816859648}
+  buttonTemplate: {fileID: 771989337}
+  homeStartTrainingButton: {fileID: 1086314225}
+  debugShapeSearchSeed: 1
+  debugShowTargetDistribution: 0
 --- !u!1 &9106798
 GameObject:
   m_ObjectHideFlags: 0

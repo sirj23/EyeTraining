@@ -79,12 +79,18 @@ namespace EyeTraining.Sessions.Scheduling
             bool includeNewNumberJourney = Contains(
                 stateAtCurrentThreshold.NewlyUnlockedExerciseIds,
                 SessionSchedulingDefinitions.SaccadesNumberJourneyId);
+            bool includeNewShapeSearch = Contains(
+                stateAtCurrentThreshold.NewlyUnlockedExerciseIds,
+                SessionSchedulingDefinitions.VisualSearchShapeSearchId);
             bool includeLandolt = _landoltSchedulePolicy.ShouldSchedule(request.CurrentSessionNumber);
 
             TimeSpan requiredDuration = SessionSchedulingDefinitions.PreparationBasic.EstimatedDuration.Value
                 + SumDuration(newlyUnlocked)
                 + (includeNewNumberJourney
                     ? SessionSchedulingDefinitions.SaccadesNumberJourney.EstimatedDuration.Value
+                    : TimeSpan.Zero)
+                + (includeNewShapeSearch
+                    ? SessionSchedulingDefinitions.VisualSearchShapeSearch.EstimatedDuration.Value
                     : TimeSpan.Zero)
                 + (includeLandolt
                     ? SessionSchedulingDefinitions.LandoltStandard.EstimatedDuration.Value
@@ -108,6 +114,7 @@ namespace EyeTraining.Sessions.Scheduling
                 returning,
                 newlyUnlocked,
                 includeNewNumberJourney,
+                includeNewShapeSearch,
                 includeLandolt);
             var plan = new SessionPlan(sessionType, exercises);
 
@@ -188,6 +195,7 @@ namespace EyeTraining.Sessions.Scheduling
             IReadOnlyList<ScheduledTracking> returning,
             IReadOnlyList<ScheduledTracking> newlyUnlocked,
             bool includeNewNumberJourney,
+            bool includeNewShapeSearch,
             bool includeLandolt)
         {
             var exercises = new List<PlannedExercise>();
@@ -217,6 +225,15 @@ namespace EyeTraining.Sessions.Scheduling
                 exercises.Add(new PlannedExercise(
                     SessionSchedulingDefinitions.SaccadesNumberJourney,
                     SessionSchedulingDefinitions.SaccadesNumberJourney.EstimatedDuration.Value,
+                    order++,
+                    SessionExerciseRole.Main));
+            }
+
+            if (includeNewShapeSearch)
+            {
+                exercises.Add(new PlannedExercise(
+                    SessionSchedulingDefinitions.VisualSearchShapeSearch,
+                    SessionSchedulingDefinitions.VisualSearchShapeSearch.EstimatedDuration.Value,
                     order++,
                     SessionExerciseRole.Main));
             }

@@ -8,6 +8,7 @@ namespace EyeTraining.Sessions.Scheduling
         public const string PreparationBasicId = "preparation.basic";
         public const string LandoltStandardId = "landolt.standard";
         public const string SaccadesNumberJourneyId = ExerciseIds.SaccadesNumberJourney;
+        public const string VisualSearchShapeSearchId = ExerciseIds.VisualSearchShapeSearch;
 
         public static readonly ExerciseDefinition PreparationBasic = new ExerciseDefinition(
             PreparationBasicId,
@@ -33,6 +34,15 @@ namespace EyeTraining.Sessions.Scheduling
             ExerciseFamily.Saccades,
             ExercisePriority.Required,
             TimeSpan.FromSeconds(15),
+            false,
+            true);
+
+        public static readonly ExerciseDefinition VisualSearchShapeSearch = new ExerciseDefinition(
+            VisualSearchShapeSearchId,
+            "Znajdź kształt",
+            ExerciseFamily.VisualSearch,
+            ExercisePriority.Required,
+            TimeSpan.FromSeconds(30),
             false,
             true);
     }

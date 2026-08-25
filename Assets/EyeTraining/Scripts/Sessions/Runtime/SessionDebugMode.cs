@@ -4,6 +4,7 @@ namespace EyeTraining.Sessions.Runtime
     {
         Normal,
         LandoltOnly,
-        NumberJourneyOnly
+        NumberJourneyOnly,
+        ShapeSearchOnly
     }
 }

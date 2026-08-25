@@ -3,6 +3,7 @@ using EyeTraining.Core;
 using EyeTraining.Exercises;
 using EyeTraining.Exercises.Landolt;
 using EyeTraining.Exercises.Saccades;
+using EyeTraining.Exercises.VisualSearch;
 using EyeTraining.Profiles;
 using EyeTraining.Save;
 using EyeTraining.Sessions.History;
@@ -22,6 +23,7 @@ namespace EyeTraining.Sessions.Runtime
         [SerializeField] private TrackingExerciseController trackingExerciseController;
         [SerializeField] private LandoltExerciseController landoltExerciseController;
         [SerializeField] private NumberJourneyController numberJourneyController;
+        [SerializeField] private ShapeSearchController shapeSearchController;
 
         [Header("Development")]
         [SerializeField] private SessionDebugMode debugMode;
@@ -39,6 +41,7 @@ namespace EyeTraining.Sessions.Runtime
         private bool skippedUnsupportedExercise;
         private bool debugLandoltOnlyActive;
         private bool debugNumberJourneyOnlyActive;
+        private bool debugShapeSearchOnlyActive;
 
         public SessionRuntimePhase Phase { get; private set; } = SessionRuntimePhase.Inactive;
 
@@ -67,6 +70,7 @@ namespace EyeTraining.Sessions.Runtime
             trackingExerciseController ??= GetComponent<TrackingExerciseController>();
             landoltExerciseController ??= GetComponent<LandoltExerciseController>();
             numberJourneyController ??= GetComponent<NumberJourneyController>();
+            shapeSearchController ??= GetComponent<ShapeSearchController>();
 
             repository = new JsonTrainingHistoryRepository();
             trackingCatalog = new TrackingExerciseCatalog();
@@ -88,6 +92,8 @@ namespace EyeTraining.Sessions.Runtime
             landoltExerciseController.ContinueRequested += HandleContinueRequested;
             numberJourneyController.ResultReady += HandleNumberJourneyResult;
             numberJourneyController.ContinueRequested += HandleContinueRequested;
+            shapeSearchController.ResultReady += HandleShapeSearchResult;
+            shapeSearchController.ContinueRequested += HandleContinueRequested;
         }
 
         private void OnDestroy()
@@ -114,6 +120,12 @@ namespace EyeTraining.Sessions.Runtime
             {
                 numberJourneyController.ResultReady -= HandleNumberJourneyResult;
                 numberJourneyController.ContinueRequested -= HandleContinueRequested;
+            }
+
+            if (shapeSearchController != null)
+            {
+                shapeSearchController.ResultReady -= HandleShapeSearchResult;
+                shapeSearchController.ContinueRequested -= HandleContinueRequested;
             }
         }
 
@@ -217,6 +229,12 @@ namespace EyeTraining.Sessions.Runtime
                 return;
             }
 
+            if (debugMode == SessionDebugMode.ShapeSearchOnly)
+            {
+                StartDebugShapeSearchOnly();
+                return;
+            }
+
             AdvanceToNextExercise();
         }
 
@@ -248,6 +266,22 @@ namespace EyeTraining.Sessions.Runtime
                 guidanceMode,
                 SessionSchedulingDefinitions.SaccadesNumberJourneyId,
                 numberJourneyController.DebugSequenceSeed);
+        }
+
+        private void StartDebugShapeSearchOnly()
+        {
+            debugShapeSearchOnlyActive = true;
+            currentStepResultReceived = false;
+            CurrentExerciseIndex = -1;
+            CurrentPlannedExercise = null;
+            Phase = SessionRuntimePhase.RunningExercise;
+            Debug.Log(
+                "[SessionRuntime] Development mode: starting Shape Search only; "
+                + "persistence disabled.");
+            shapeSearchController.Begin(
+                guidanceMode,
+                SessionSchedulingDefinitions.VisualSearchShapeSearchId,
+                shapeSearchController.DebugShapeSearchSeed);
         }
 
         public void AbortSession()
@@ -326,6 +360,16 @@ namespace EyeTraining.Sessions.Runtime
                         return;
                     }
 
+                    if (CurrentPlannedExercise.Definition.Family == ExerciseFamily.VisualSearch
+                        && string.Equals(
+                            CurrentPlannedExercise.Definition.Id,
+                            SessionSchedulingDefinitions.VisualSearchShapeSearchId,
+                            StringComparison.Ordinal))
+                    {
+                        StartShapeSearch();
+                        return;
+                    }
+
                     if (!skipUnsupportedExercisesInDevelopment)
                     {
                         Fail(
@@ -399,6 +443,16 @@ namespace EyeTraining.Sessions.Runtime
             Phase = SessionRuntimePhase.RunningExercise;
             Debug.Log("[SessionRuntime] Starting: " + CurrentPlannedExercise.Definition.Id);
             numberJourneyController.Begin(
+                guidanceMode,
+                CurrentPlannedExercise.Definition.Id,
+                CurrentSessionNumber);
+        }
+
+        private void StartShapeSearch()
+        {
+            Phase = SessionRuntimePhase.RunningExercise;
+            Debug.Log("[SessionRuntime] Starting: " + CurrentPlannedExercise.Definition.Id);
+            shapeSearchController.Begin(
                 guidanceMode,
                 CurrentPlannedExercise.Definition.Id,
                 CurrentSessionNumber);
@@ -577,6 +631,65 @@ namespace EyeTraining.Sessions.Runtime
             Phase = SessionRuntimePhase.WaitingForContinue;
         }
 
+        private void HandleShapeSearchResult(ShapeSearchExerciseResult result)
+        {
+            if (Phase != SessionRuntimePhase.RunningExercise || currentStepResultReceived)
+            {
+                return;
+            }
+
+            if (debugShapeSearchOnlyActive)
+            {
+                currentStepResultReceived = true;
+                Debug.Log(
+                    $"[SessionRuntime] Development Shape Search result: "
+                    + $"{result.CompletionStatus} / {result.CorrectSelections}/{result.TargetCount}; "
+                    + "not persisted.");
+                if (result.CompletionStatus == ExerciseCompletionStatus.Interrupted)
+                {
+                    AbortSession();
+                }
+                else
+                {
+                    Phase = SessionRuntimePhase.WaitingForContinue;
+                }
+
+                return;
+            }
+
+            if (CurrentPlannedExercise == null
+                || CurrentPlannedExercise.Definition.Family != ExerciseFamily.VisualSearch
+                || !string.Equals(
+                    CurrentPlannedExercise.Definition.Id,
+                    result.ExerciseId,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            currentStepResultReceived = true;
+            Debug.Log(
+                $"[SessionRuntime] Result: {result.ExerciseId} / {result.CompletionStatus} / "
+                + $"{result.CorrectSelections}/{result.TargetCount}, errors: {result.ErrorCount}");
+
+            if (result.CompletionStatus == ExerciseCompletionStatus.Interrupted)
+            {
+                AbortSession();
+                return;
+            }
+
+            var entry = new ExerciseHistoryEntry(
+                activeProfile.Id,
+                result.ExerciseId,
+                CurrentSessionNumber,
+                null,
+                result.CompletionStatus,
+                ExerciseFeedback.None,
+                DateTimeOffset.Now);
+            PendingSnapshot = PendingSnapshot.WithEntry(entry);
+            Phase = SessionRuntimePhase.WaitingForContinue;
+        }
+
         private void HandleContinueRequested()
         {
             if (Phase != SessionRuntimePhase.WaitingForContinue || !currentStepResultReceived)
@@ -601,6 +714,18 @@ namespace EyeTraining.Sessions.Runtime
                 ClearPendingSession();
                 Debug.Log(
                     "[SessionRuntime] Development Number Journey-only run completed "
+                    + "without saving.");
+                PreparedSessionChanged?.Invoke();
+                return;
+            }
+
+            if (debugShapeSearchOnlyActive)
+            {
+                shapeSearchController.ExitToHome();
+                Phase = SessionRuntimePhase.Aborted;
+                ClearPendingSession();
+                Debug.Log(
+                    "[SessionRuntime] Development Shape Search-only run completed "
                     + "without saving.");
                 PreparedSessionChanged?.Invoke();
                 return;
@@ -667,6 +792,7 @@ namespace EyeTraining.Sessions.Runtime
             skippedUnsupportedExercise = false;
             debugLandoltOnlyActive = false;
             debugNumberJourneyOnlyActive = false;
+            debugShapeSearchOnlyActive = false;
         }
     }
 }
