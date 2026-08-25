@@ -76,10 +76,16 @@ namespace EyeTraining.Sessions.Scheduling
             List<ScheduledTracking> newlyUnlocked = BuildTrackingExercises(
                 newTrackingIds,
                 request);
+            bool includeNewNumberJourney = Contains(
+                stateAtCurrentThreshold.NewlyUnlockedExerciseIds,
+                SessionSchedulingDefinitions.SaccadesNumberJourneyId);
             bool includeLandolt = _landoltSchedulePolicy.ShouldSchedule(request.CurrentSessionNumber);
 
             TimeSpan requiredDuration = SessionSchedulingDefinitions.PreparationBasic.EstimatedDuration.Value
                 + SumDuration(newlyUnlocked)
+                + (includeNewNumberJourney
+                    ? SessionSchedulingDefinitions.SaccadesNumberJourney.EstimatedDuration.Value
+                    : TimeSpan.Zero)
                 + (includeLandolt
                     ? SessionSchedulingDefinitions.LandoltStandard.EstimatedDuration.Value
                     : TimeSpan.Zero);
@@ -101,6 +107,7 @@ namespace EyeTraining.Sessions.Scheduling
             List<PlannedExercise> exercises = BuildOrderedPlan(
                 returning,
                 newlyUnlocked,
+                includeNewNumberJourney,
                 includeLandolt);
             var plan = new SessionPlan(sessionType, exercises);
 
@@ -180,6 +187,7 @@ namespace EyeTraining.Sessions.Scheduling
         private static List<PlannedExercise> BuildOrderedPlan(
             IReadOnlyList<ScheduledTracking> returning,
             IReadOnlyList<ScheduledTracking> newlyUnlocked,
+            bool includeNewNumberJourney,
             bool includeLandolt)
         {
             var exercises = new List<PlannedExercise>();
@@ -204,6 +212,15 @@ namespace EyeTraining.Sessions.Scheduling
                 }
             }
 
+            if (includeNewNumberJourney)
+            {
+                exercises.Add(new PlannedExercise(
+                    SessionSchedulingDefinitions.SaccadesNumberJourney,
+                    SessionSchedulingDefinitions.SaccadesNumberJourney.EstimatedDuration.Value,
+                    order++,
+                    SessionExerciseRole.Main));
+            }
+
             if (includeLandolt)
             {
                 exercises.Add(new PlannedExercise(
@@ -214,6 +231,19 @@ namespace EyeTraining.Sessions.Scheduling
             }
 
             return exercises;
+        }
+
+        private static bool Contains(IReadOnlyList<string> ids, string expectedId)
+        {
+            for (var index = 0; index < ids.Count; index++)
+            {
+                if (string.Equals(ids[index], expectedId, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static PlannedExercise CreatePlannedTracking(

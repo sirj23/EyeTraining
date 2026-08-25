@@ -2,6 +2,7 @@ using System;
 using EyeTraining.Core;
 using EyeTraining.Exercises;
 using EyeTraining.Exercises.Landolt;
+using EyeTraining.Exercises.Saccades;
 using EyeTraining.Profiles;
 using EyeTraining.Save;
 using EyeTraining.Sessions.History;
@@ -20,6 +21,7 @@ namespace EyeTraining.Sessions.Runtime
         [SerializeField] private PreparationController preparationController;
         [SerializeField] private TrackingExerciseController trackingExerciseController;
         [SerializeField] private LandoltExerciseController landoltExerciseController;
+        [SerializeField] private NumberJourneyController numberJourneyController;
 
         [Header("Development")]
         [SerializeField] private SessionDebugMode debugMode;
@@ -36,6 +38,7 @@ namespace EyeTraining.Sessions.Runtime
         private bool advancing;
         private bool skippedUnsupportedExercise;
         private bool debugLandoltOnlyActive;
+        private bool debugNumberJourneyOnlyActive;
 
         public SessionRuntimePhase Phase { get; private set; } = SessionRuntimePhase.Inactive;
 
@@ -63,6 +66,7 @@ namespace EyeTraining.Sessions.Runtime
             preparationController ??= GetComponent<PreparationController>();
             trackingExerciseController ??= GetComponent<TrackingExerciseController>();
             landoltExerciseController ??= GetComponent<LandoltExerciseController>();
+            numberJourneyController ??= GetComponent<NumberJourneyController>();
 
             repository = new JsonTrainingHistoryRepository();
             trackingCatalog = new TrackingExerciseCatalog();
@@ -82,6 +86,8 @@ namespace EyeTraining.Sessions.Runtime
             trackingExerciseController.ContinueRequested += HandleContinueRequested;
             landoltExerciseController.ResultReady += HandleLandoltResult;
             landoltExerciseController.ContinueRequested += HandleContinueRequested;
+            numberJourneyController.ResultReady += HandleNumberJourneyResult;
+            numberJourneyController.ContinueRequested += HandleContinueRequested;
         }
 
         private void OnDestroy()
@@ -102,6 +108,12 @@ namespace EyeTraining.Sessions.Runtime
             {
                 landoltExerciseController.ResultReady -= HandleLandoltResult;
                 landoltExerciseController.ContinueRequested -= HandleContinueRequested;
+            }
+
+            if (numberJourneyController != null)
+            {
+                numberJourneyController.ResultReady -= HandleNumberJourneyResult;
+                numberJourneyController.ContinueRequested -= HandleContinueRequested;
             }
         }
 
@@ -199,6 +211,12 @@ namespace EyeTraining.Sessions.Runtime
                 return;
             }
 
+            if (debugMode == SessionDebugMode.NumberJourneyOnly)
+            {
+                StartDebugNumberJourneyOnly();
+                return;
+            }
+
             AdvanceToNextExercise();
         }
 
@@ -214,6 +232,22 @@ namespace EyeTraining.Sessions.Runtime
                 guidanceMode,
                 CurrentSessionNumber,
                 GetActiveLandoltBackgroundMode());
+        }
+
+        private void StartDebugNumberJourneyOnly()
+        {
+            debugNumberJourneyOnlyActive = true;
+            currentStepResultReceived = false;
+            CurrentExerciseIndex = -1;
+            CurrentPlannedExercise = null;
+            Phase = SessionRuntimePhase.RunningExercise;
+            Debug.Log(
+                "[SessionRuntime] Development mode: starting Number Journey only; "
+                + "persistence disabled.");
+            numberJourneyController.Begin(
+                guidanceMode,
+                SessionSchedulingDefinitions.SaccadesNumberJourneyId,
+                numberJourneyController.DebugSequenceSeed);
         }
 
         public void AbortSession()
@@ -279,6 +313,16 @@ namespace EyeTraining.Sessions.Runtime
                             StringComparison.Ordinal))
                     {
                         StartLandolt();
+                        return;
+                    }
+
+                    if (CurrentPlannedExercise.Definition.Family == ExerciseFamily.Saccades
+                        && string.Equals(
+                            CurrentPlannedExercise.Definition.Id,
+                            SessionSchedulingDefinitions.SaccadesNumberJourneyId,
+                            StringComparison.Ordinal))
+                    {
+                        StartNumberJourney();
                         return;
                     }
 
@@ -348,6 +392,16 @@ namespace EyeTraining.Sessions.Runtime
             }
 
             return activeProfile.LandoltBackgroundMode;
+        }
+
+        private void StartNumberJourney()
+        {
+            Phase = SessionRuntimePhase.RunningExercise;
+            Debug.Log("[SessionRuntime] Starting: " + CurrentPlannedExercise.Definition.Id);
+            numberJourneyController.Begin(
+                guidanceMode,
+                CurrentPlannedExercise.Definition.Id,
+                CurrentSessionNumber);
         }
 
         private void HandlePreparationCompleted()
@@ -465,6 +519,64 @@ namespace EyeTraining.Sessions.Runtime
             Phase = SessionRuntimePhase.WaitingForContinue;
         }
 
+        private void HandleNumberJourneyResult(SaccadesExerciseResult result)
+        {
+            if (Phase != SessionRuntimePhase.RunningExercise || currentStepResultReceived)
+            {
+                return;
+            }
+
+            if (debugNumberJourneyOnlyActive)
+            {
+                currentStepResultReceived = true;
+                Debug.Log(
+                    $"[SessionRuntime] Development Number Journey result: "
+                    + $"{result.CompletionStatus}; not persisted.");
+                if (result.CompletionStatus == ExerciseCompletionStatus.Interrupted)
+                {
+                    AbortSession();
+                }
+                else
+                {
+                    Phase = SessionRuntimePhase.WaitingForContinue;
+                }
+
+                return;
+            }
+
+            if (CurrentPlannedExercise == null
+                || CurrentPlannedExercise.Definition.Family != ExerciseFamily.Saccades
+                || !string.Equals(
+                    CurrentPlannedExercise.Definition.Id,
+                    result.ExerciseId,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            currentStepResultReceived = true;
+            Debug.Log(
+                $"[SessionRuntime] Result: {result.ExerciseId} / "
+                + result.CompletionStatus);
+
+            if (result.CompletionStatus == ExerciseCompletionStatus.Interrupted)
+            {
+                AbortSession();
+                return;
+            }
+
+            var entry = new ExerciseHistoryEntry(
+                activeProfile.Id,
+                result.ExerciseId,
+                CurrentSessionNumber,
+                null,
+                result.CompletionStatus,
+                ExerciseFeedback.None,
+                DateTimeOffset.Now);
+            PendingSnapshot = PendingSnapshot.WithEntry(entry);
+            Phase = SessionRuntimePhase.WaitingForContinue;
+        }
+
         private void HandleContinueRequested()
         {
             if (Phase != SessionRuntimePhase.WaitingForContinue || !currentStepResultReceived)
@@ -478,6 +590,18 @@ namespace EyeTraining.Sessions.Runtime
                 Phase = SessionRuntimePhase.Aborted;
                 ClearPendingSession();
                 Debug.Log("[SessionRuntime] Development Landolt-only run completed without saving.");
+                PreparedSessionChanged?.Invoke();
+                return;
+            }
+
+            if (debugNumberJourneyOnlyActive)
+            {
+                numberJourneyController.ExitToHome();
+                Phase = SessionRuntimePhase.Aborted;
+                ClearPendingSession();
+                Debug.Log(
+                    "[SessionRuntime] Development Number Journey-only run completed "
+                    + "without saving.");
                 PreparedSessionChanged?.Invoke();
                 return;
             }
@@ -542,6 +666,7 @@ namespace EyeTraining.Sessions.Runtime
             currentStepResultReceived = false;
             skippedUnsupportedExercise = false;
             debugLandoltOnlyActive = false;
+            debugNumberJourneyOnlyActive = false;
         }
     }
 }

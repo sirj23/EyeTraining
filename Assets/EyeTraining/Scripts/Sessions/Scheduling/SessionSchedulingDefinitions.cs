@@ -1,4 +1,5 @@
 using System;
+using EyeTraining.Sessions.Unlocking;
 
 namespace EyeTraining.Sessions.Scheduling
 {
@@ -6,6 +7,7 @@ namespace EyeTraining.Sessions.Scheduling
     {
         public const string PreparationBasicId = "preparation.basic";
         public const string LandoltStandardId = "landolt.standard";
+        public const string SaccadesNumberJourneyId = ExerciseIds.SaccadesNumberJourney;
 
         public static readonly ExerciseDefinition PreparationBasic = new ExerciseDefinition(
             PreparationBasicId,
@@ -22,6 +24,15 @@ namespace EyeTraining.Sessions.Scheduling
             ExerciseFamily.LandoltC,
             ExercisePriority.High,
             TimeSpan.FromMinutes(1),
+            false,
+            true);
+
+        public static readonly ExerciseDefinition SaccadesNumberJourney = new ExerciseDefinition(
+            SaccadesNumberJourneyId,
+            "Wędrówka wśród liczb",
+            ExerciseFamily.Saccades,
+            ExercisePriority.Required,
+            TimeSpan.FromSeconds(15),
             false,
             true);
     }
