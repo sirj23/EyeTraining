@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using EyeTraining.Sessions.Progression.Tracking;
+using EyeTraining.Sessions.Progression.Saccades;
 using EyeTraining.Sessions.Rotation;
 using EyeTraining.Sessions.Unlocking;
 
@@ -16,6 +17,7 @@ namespace EyeTraining.Sessions.Scheduling
         private readonly UnlockService _unlockService;
         private readonly RotationService _rotationService;
         private readonly TrackingProgressionService _progressionService;
+        private readonly NumberJourneyProgressionService _numberJourneyProgressionService;
         private readonly TrackingExerciseCatalog _trackingCatalog;
         private readonly ITrackingDurationEstimator _durationEstimator;
         private readonly ILandoltSchedulePolicy _landoltSchedulePolicy;
@@ -24,6 +26,7 @@ namespace EyeTraining.Sessions.Scheduling
             UnlockService unlockService,
             RotationService rotationService,
             TrackingProgressionService progressionService,
+            NumberJourneyProgressionService numberJourneyProgressionService,
             TrackingExerciseCatalog trackingCatalog,
             ITrackingDurationEstimator durationEstimator,
             ILandoltSchedulePolicy landoltSchedulePolicy)
@@ -32,6 +35,8 @@ namespace EyeTraining.Sessions.Scheduling
             _rotationService = rotationService ?? throw new ArgumentNullException(nameof(rotationService));
             _progressionService = progressionService
                 ?? throw new ArgumentNullException(nameof(progressionService));
+            _numberJourneyProgressionService = numberJourneyProgressionService
+                ?? throw new ArgumentNullException(nameof(numberJourneyProgressionService));
             _trackingCatalog = trackingCatalog
                 ?? throw new ArgumentNullException(nameof(trackingCatalog));
             _durationEstimator = durationEstimator
@@ -79,6 +84,10 @@ namespace EyeTraining.Sessions.Scheduling
             bool includeNewNumberJourney = Contains(
                 stateAtCurrentThreshold.NewlyUnlockedExerciseIds,
                 SessionSchedulingDefinitions.SaccadesNumberJourneyId);
+            NumberJourneyProgressionState numberJourneyProgression =
+                _numberJourneyProgressionService.GetState(
+                    request.NumberJourneyProgressionHistory,
+                    request.CurrentSessionNumber);
             bool includeNewShapeSearch = Contains(
                 stateAtCurrentThreshold.NewlyUnlockedExerciseIds,
                 SessionSchedulingDefinitions.VisualSearchShapeSearchId);
@@ -87,7 +96,7 @@ namespace EyeTraining.Sessions.Scheduling
             TimeSpan requiredDuration = SessionSchedulingDefinitions.PreparationBasic.EstimatedDuration.Value
                 + SumDuration(newlyUnlocked)
                 + (includeNewNumberJourney
-                    ? SessionSchedulingDefinitions.SaccadesNumberJourney.EstimatedDuration.Value
+                    ? numberJourneyProgression.Settings.EstimatedDuration
                     : TimeSpan.Zero)
                 + (includeNewShapeSearch
                     ? SessionSchedulingDefinitions.VisualSearchShapeSearch.EstimatedDuration.Value
@@ -114,6 +123,7 @@ namespace EyeTraining.Sessions.Scheduling
                 returning,
                 newlyUnlocked,
                 includeNewNumberJourney,
+                numberJourneyProgression.Settings,
                 includeNewShapeSearch,
                 includeLandolt);
             var plan = new SessionPlan(sessionType, exercises);
@@ -195,6 +205,7 @@ namespace EyeTraining.Sessions.Scheduling
             IReadOnlyList<ScheduledTracking> returning,
             IReadOnlyList<ScheduledTracking> newlyUnlocked,
             bool includeNewNumberJourney,
+            NumberJourneyLevelSettings numberJourneySettings,
             bool includeNewShapeSearch,
             bool includeLandolt)
         {
@@ -224,9 +235,10 @@ namespace EyeTraining.Sessions.Scheduling
             {
                 exercises.Add(new PlannedExercise(
                     SessionSchedulingDefinitions.SaccadesNumberJourney,
-                    SessionSchedulingDefinitions.SaccadesNumberJourney.EstimatedDuration.Value,
+                    numberJourneySettings.EstimatedDuration,
                     order++,
-                    SessionExerciseRole.Main));
+                    SessionExerciseRole.Main,
+                    numberJourneySettings));
             }
 
             if (includeNewShapeSearch)

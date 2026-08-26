@@ -5,9 +5,6 @@ namespace EyeTraining.Exercises.Saccades
 {
     public sealed class NumberJourneySequence
     {
-        public const int Length = 5;
-        public const float MinimumPreferredJumpInViewportHeight = 0.38f;
-
         private readonly IReadOnlyList<int> _numbers;
 
         private NumberJourneySequence(IReadOnlyList<int> numbers)
@@ -20,7 +17,9 @@ namespace EyeTraining.Exercises.Saccades
         public static NumberJourneySequence Create(
             int seed,
             NumberJourneyLayout layout,
-            float aspectRatio)
+            float aspectRatio,
+            int sequenceLength,
+            float preferredMinimumJump)
         {
             if (layout == null)
             {
@@ -32,19 +31,30 @@ namespace EyeTraining.Exercises.Saccades
                 throw new ArgumentOutOfRangeException(nameof(aspectRatio));
             }
 
-            var random = new System.Random(unchecked(seed * 397) ^ 0x51A7C3);
-            var available = new List<int>(NumberJourneyLayout.NumberCount);
-            for (var number = 1; number <= NumberJourneyLayout.NumberCount; number++)
+            if (sequenceLength <= 0 || sequenceLength > layout.NumberCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(sequenceLength));
+            }
+
+            if (preferredMinimumJump <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(preferredMinimumJump));
+            }
+
+            var random = new System.Random(
+                unchecked((seed * 397) ^ (layout.NumberCount * 7919) ^ 0x51A7C3));
+            var available = new List<int>(layout.NumberCount);
+            for (var number = 1; number <= layout.NumberCount; number++)
             {
                 available.Add(number);
             }
 
-            var selected = new List<int>(Length);
+            var selected = new List<int>(sequenceLength);
             int firstIndex = random.Next(available.Count);
             selected.Add(available[firstIndex]);
             available.RemoveAt(firstIndex);
 
-            while (selected.Count < Length)
+            while (selected.Count < sequenceLength)
             {
                 int previous = selected[selected.Count - 1];
                 available.Sort((left, right) => CompareByDistance(
@@ -58,7 +68,8 @@ namespace EyeTraining.Exercises.Saccades
                     previous,
                     available,
                     layout,
-                    aspectRatio);
+                    aspectRatio,
+                    preferredMinimumJump);
                 int candidatePool = Math.Max(1, Math.Min(3, preferredCount));
                 int selectedIndex = random.Next(candidatePool);
                 selected.Add(available[selectedIndex]);
@@ -85,13 +96,14 @@ namespace EyeTraining.Exercises.Saccades
             int previous,
             IReadOnlyList<int> available,
             NumberJourneyLayout layout,
-            float aspectRatio)
+            float aspectRatio,
+            float preferredMinimumJump)
         {
             var count = 0;
             for (var index = 0; index < available.Count; index++)
             {
                 if (GetDistance(previous, available[index], layout, aspectRatio)
-                    >= MinimumPreferredJumpInViewportHeight)
+                    >= preferredMinimumJump)
                 {
                     count++;
                 }

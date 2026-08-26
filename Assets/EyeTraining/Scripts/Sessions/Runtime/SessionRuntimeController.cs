@@ -8,6 +8,7 @@ using EyeTraining.Profiles;
 using EyeTraining.Save;
 using EyeTraining.Sessions.History;
 using EyeTraining.Sessions.Progression.Tracking;
+using EyeTraining.Sessions.Progression.Saccades;
 using EyeTraining.Sessions.Rotation;
 using EyeTraining.Sessions.Scheduling;
 using EyeTraining.Sessions.Unlocking;
@@ -33,6 +34,7 @@ namespace EyeTraining.Sessions.Runtime
         private ITrainingHistoryRepository repository;
         private SessionScheduler scheduler;
         private TrackingExerciseCatalog trackingCatalog;
+        private NumberJourneyProgressionService numberJourneyProgressionService;
         private UserProfile activeProfile;
         private SessionGuidanceMode guidanceMode;
         private DateTimeOffset pendingSessionStartDate;
@@ -76,10 +78,13 @@ namespace EyeTraining.Sessions.Runtime
             trackingCatalog = new TrackingExerciseCatalog();
             var progressionService = new TrackingProgressionService(
                 DefaultTrackingProgressionPlan.Create());
+            numberJourneyProgressionService = new NumberJourneyProgressionService(
+                DefaultNumberJourneyProgressionPlan.Create());
             scheduler = new SessionScheduler(
                 new UnlockService(DefaultUnlockPlan.Create()),
                 new RotationService(new TrackingRotationCatalog()),
                 progressionService,
+                numberJourneyProgressionService,
                 trackingCatalog,
                 new ReferenceTrackingDurationEstimator(trackingCatalog),
                 new DefaultLandoltSchedulePolicy());
@@ -157,7 +162,8 @@ namespace EyeTraining.Sessions.Runtime
                     currentSessionNumber,
                     snapshot.State.CompletedSessionCount,
                     TrainingHistoryMapper.ToRotationHistory(snapshot),
-                    TrainingHistoryMapper.ToTrackingProgressionHistory(snapshot));
+                    TrainingHistoryMapper.ToTrackingProgressionHistory(snapshot),
+                    TrainingHistoryMapper.ToNumberJourneyProgressionHistory(snapshot));
                 SessionScheduleResult result = scheduler.Schedule(request);
                 if (!result.IsSuccess)
                 {
@@ -265,7 +271,9 @@ namespace EyeTraining.Sessions.Runtime
             numberJourneyController.Begin(
                 guidanceMode,
                 SessionSchedulingDefinitions.SaccadesNumberJourneyId,
-                numberJourneyController.DebugSequenceSeed);
+                numberJourneyController.DebugSequenceSeed,
+                numberJourneyProgressionService.GetSettings(
+                    numberJourneyController.DebugNumberJourneyLevel));
         }
 
         private void StartDebugShapeSearchOnly()
@@ -440,12 +448,21 @@ namespace EyeTraining.Sessions.Runtime
 
         private void StartNumberJourney()
         {
+            if (CurrentPlannedExercise.Parameters is not NumberJourneyLevelSettings settings)
+            {
+                Fail("Number Journey has invalid progression parameters.");
+                trackingExerciseController.ShowSessionError(
+                    "Nie udało się uruchomić ćwiczenia.");
+                return;
+            }
+
             Phase = SessionRuntimePhase.RunningExercise;
             Debug.Log("[SessionRuntime] Starting: " + CurrentPlannedExercise.Definition.Id);
             numberJourneyController.Begin(
                 guidanceMode,
                 CurrentPlannedExercise.Definition.Id,
-                CurrentSessionNumber);
+                CurrentSessionNumber,
+                settings);
         }
 
         private void StartShapeSearch()
@@ -623,7 +640,7 @@ namespace EyeTraining.Sessions.Runtime
                 activeProfile.Id,
                 result.ExerciseId,
                 CurrentSessionNumber,
-                null,
+                ((NumberJourneyLevelSettings)CurrentPlannedExercise.Parameters).Level,
                 result.CompletionStatus,
                 ExerciseFeedback.None,
                 DateTimeOffset.Now);

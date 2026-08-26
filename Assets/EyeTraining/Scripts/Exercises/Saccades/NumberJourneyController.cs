@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using EyeTraining.Core;
 using EyeTraining.Sessions.History;
+using EyeTraining.Sessions.Progression.Saccades;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -23,10 +24,6 @@ namespace EyeTraining.Exercises.Saccades
             Completed
         }
 
-        private const float CountdownStepDuration = 0.7f;
-        private const float ActiveNumberDuration = 0.75f;
-        private const float NumberGapDuration = 0.25f;
-        private const float BetweenPhasesDuration = 1.25f;
         private const float ActiveScale = 1.12f;
 
         private static readonly Color BackgroundColor = new(0.025f, 0.04f, 0.065f, 1f);
@@ -42,6 +39,8 @@ namespace EyeTraining.Exercises.Saccades
 
         [Header("Debug")]
         [SerializeField] private int debugSequenceSeed = 1;
+        [Range(0, 5)]
+        [SerializeField] private int debugNumberJourneyLevel;
         [SerializeField] private bool debugShowSequence;
 
         private readonly List<TMP_Text> numberTexts = new();
@@ -58,6 +57,7 @@ namespace EyeTraining.Exercises.Saccades
         private Button continueButton;
         private NumberJourneyLayout layout;
         private NumberJourneySequence sequence;
+        private NumberJourneyLevelSettings settings;
         private Coroutine activeSequence;
         private ExercisePhase phase;
         private string exerciseId;
@@ -66,6 +66,8 @@ namespace EyeTraining.Exercises.Saccades
         public SaccadesExerciseResult LastResult { get; private set; }
 
         public int DebugSequenceSeed => debugSequenceSeed;
+
+        public int DebugNumberJourneyLevel => debugNumberJourneyLevel;
 
         public event Action<SaccadesExerciseResult> ResultReady;
 
@@ -87,7 +89,8 @@ namespace EyeTraining.Exercises.Saccades
         public void Begin(
             SessionGuidanceMode guidanceMode,
             string currentExerciseId,
-            int sequenceSeed)
+            int sequenceSeed,
+            NumberJourneyLevelSettings levelSettings)
         {
             if (string.IsNullOrWhiteSpace(currentExerciseId))
             {
@@ -95,6 +98,8 @@ namespace EyeTraining.Exercises.Saccades
                     "Exercise ID cannot be empty.",
                     nameof(currentExerciseId));
             }
+
+            settings = levelSettings ?? throw new ArgumentNullException(nameof(levelSettings));
 
             _ = guidanceMode;
             exerciseId = currentExerciseId;
@@ -104,8 +109,16 @@ namespace EyeTraining.Exercises.Saccades
 
             RectTransform canvasRect = (RectTransform)canvas.transform;
             float aspectRatio = canvasRect.rect.width / canvasRect.rect.height;
-            layout = NumberJourneyLayout.Create(sequenceSeed, aspectRatio);
-            sequence = NumberJourneySequence.Create(sequenceSeed, layout, aspectRatio);
+            layout = NumberJourneyLayout.Create(
+                sequenceSeed,
+                aspectRatio,
+                settings.NumberCount);
+            sequence = NumberJourneySequence.Create(
+                sequenceSeed,
+                layout,
+                aspectRatio,
+                settings.SequenceLength,
+                settings.PreferredMinimumJump);
             ApplyLayout();
 
             if (debugShowSequence)
@@ -145,7 +158,8 @@ namespace EyeTraining.Exercises.Saccades
             for (var number = 3; number >= 1; number--)
             {
                 countdownText.text = number.ToString();
-                yield return new WaitForSecondsRealtime(CountdownStepDuration);
+                yield return new WaitForSecondsRealtime(
+                    NumberJourneyLevelSettings.CountdownStepDuration);
             }
 
             countdownText.gameObject.SetActive(false);
@@ -159,7 +173,8 @@ namespace EyeTraining.Exercises.Saccades
             phase = ExercisePhase.Pause;
             phaseText.text = "Teraz wyprzedzaj wzrokiem.";
             phaseText.gameObject.SetActive(true);
-            yield return new WaitForSecondsRealtime(BetweenPhasesDuration);
+            yield return new WaitForSecondsRealtime(
+                NumberJourneyLevelSettings.BetweenPhasesDuration);
             phaseText.gameObject.SetActive(false);
 
             phase = ExercisePhase.Anticipation;
@@ -175,11 +190,11 @@ namespace EyeTraining.Exercises.Saccades
             {
                 TMP_Text numberText = numberTexts[sequence.Numbers[index] - 1];
                 SetNumberActive(numberText, true);
-                yield return new WaitForSecondsRealtime(ActiveNumberDuration);
+                yield return new WaitForSecondsRealtime(settings.ActiveDuration);
                 SetNumberActive(numberText, false);
                 if (index < sequence.Numbers.Count - 1)
                 {
-                    yield return new WaitForSecondsRealtime(NumberGapDuration);
+                    yield return new WaitForSecondsRealtime(settings.GapDuration);
                 }
             }
         }
@@ -257,6 +272,11 @@ namespace EyeTraining.Exercises.Saccades
                 rect.localRotation = Quaternion.Euler(0f, 0f, item.RotationDegrees);
                 SetNumberActive(text, false);
             }
+
+            for (var index = layout.Items.Count; index < numberTexts.Count; index++)
+            {
+                numberTexts[index].gameObject.SetActive(false);
+            }
         }
 
         private static void SetNumberActive(TMP_Text text, bool active)
@@ -287,7 +307,8 @@ namespace EyeTraining.Exercises.Saccades
         {
             for (var index = 0; index < numberTexts.Count; index++)
             {
-                numberTexts[index].gameObject.SetActive(visible);
+                numberTexts[index].gameObject.SetActive(
+                    visible && index < settings.NumberCount);
             }
         }
 
@@ -349,7 +370,7 @@ namespace EyeTraining.Exercises.Saccades
                 new Vector2(0.22f, 0.44f),
                 new Vector2(0.78f, 0.64f));
 
-            for (var number = 1; number <= NumberJourneyLayout.NumberCount; number++)
+            for (var number = 1; number <= NumberJourneyLayout.MaximumNumberCount; number++)
             {
                 TMP_Text numberText = CreateText(
                     $"Number {number}",
@@ -357,7 +378,9 @@ namespace EyeTraining.Exercises.Saccades
                     76f,
                     new Vector2(0.5f, 0.5f),
                     new Vector2(0.5f, 0.5f));
-                numberText.rectTransform.sizeDelta = new Vector2(120f, 100f);
+                numberText.textWrappingMode = TextWrappingModes.NoWrap;
+                numberText.overflowMode = TextOverflowModes.Overflow;
+                numberText.rectTransform.sizeDelta = new Vector2(160f, 100f);
                 numberTexts.Add(numberText);
             }
 

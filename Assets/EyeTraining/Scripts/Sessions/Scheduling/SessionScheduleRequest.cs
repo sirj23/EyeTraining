@@ -1,5 +1,6 @@
 using System;
 using EyeTraining.Sessions.Progression.Tracking;
+using EyeTraining.Sessions.Progression.Saccades;
 using EyeTraining.Sessions.Rotation;
 
 namespace EyeTraining.Sessions.Scheduling
@@ -10,7 +11,8 @@ namespace EyeTraining.Sessions.Scheduling
             int currentSessionNumber,
             int completedSessionCount,
             RotationHistory rotationHistory,
-            TrackingProgressionHistory trackingProgressionHistory)
+            TrackingProgressionHistory trackingProgressionHistory,
+            NumberJourneyProgressionHistory numberJourneyProgressionHistory)
         {
             if (currentSessionNumber <= 0)
             {
@@ -33,6 +35,8 @@ namespace EyeTraining.Sessions.Scheduling
             RotationHistory = rotationHistory ?? throw new ArgumentNullException(nameof(rotationHistory));
             TrackingProgressionHistory = trackingProgressionHistory
                 ?? throw new ArgumentNullException(nameof(trackingProgressionHistory));
+            NumberJourneyProgressionHistory = numberJourneyProgressionHistory
+                ?? throw new ArgumentNullException(nameof(numberJourneyProgressionHistory));
         }
 
         public int CurrentSessionNumber { get; }
@@ -42,5 +46,7 @@ namespace EyeTraining.Sessions.Scheduling
         public RotationHistory RotationHistory { get; }
 
         public TrackingProgressionHistory TrackingProgressionHistory { get; }
+
+        public NumberJourneyProgressionHistory NumberJourneyProgressionHistory { get; }
     }
 }

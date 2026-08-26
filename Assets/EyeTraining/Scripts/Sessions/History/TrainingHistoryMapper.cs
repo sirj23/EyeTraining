@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using EyeTraining.Sessions.Progression.Tracking;
+using EyeTraining.Sessions.Progression.Saccades;
 using EyeTraining.Sessions.Rotation;
 using EyeTraining.Sessions.Unlocking;
 
@@ -68,6 +69,38 @@ namespace EyeTraining.Sessions.History
             }
 
             return new TrackingProgressionHistory(entries);
+        }
+
+        public static NumberJourneyProgressionHistory ToNumberJourneyProgressionHistory(
+            TrainingHistorySnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            var entries = new List<NumberJourneyProgressionEntry>();
+            for (var index = 0; index < snapshot.Entries.Count; index++)
+            {
+                ExerciseHistoryEntry entry = snapshot.Entries[index];
+                if (!string.Equals(
+                        entry.ExerciseId,
+                        ExerciseIds.SaccadesNumberJourney,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // Entries created before Number Journey progression used the exact L0
+                // parameters but did not persist AppliedLevel yet.
+                int appliedLevel = entry.AppliedLevel ?? 0;
+                entries.Add(new NumberJourneyProgressionEntry(
+                    entry.CompletedSessionNumber,
+                    appliedLevel,
+                    entry.CompletionStatus));
+            }
+
+            return new NumberJourneyProgressionHistory(entries);
         }
     }
 }
