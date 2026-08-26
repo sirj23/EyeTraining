@@ -25,7 +25,7 @@ namespace EyeTraining.Exercises.VisualSearch
 
         public int ErrorCount { get; private set; }
 
-        public bool IsCompleted => CorrectSelections == ShapeSearchRound.TargetCount;
+        public bool IsCompleted => CorrectSelections == _round.TargetCount;
 
         public bool IsTargetSelected(int itemIndex) => _selectedTargets.Contains(itemIndex);
 

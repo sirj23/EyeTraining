@@ -5,41 +5,39 @@ namespace EyeTraining.Exercises.VisualSearch
 {
     public sealed class ShapeSearchRound
     {
-        public const int TargetCount = 4;
-        public const int DistractorCount = ShapeSearchLayout.ItemCount - TargetCount;
-
         private readonly IReadOnlyList<ShapeSearchRoundItem> _items;
 
         private ShapeSearchRound(
             ShapeSearchShape targetShape,
+            int targetCount,
             IReadOnlyList<ShapeSearchRoundItem> items)
         {
             TargetShape = targetShape;
+            TargetCount = targetCount;
             _items = items;
         }
 
         public ShapeSearchShape TargetShape { get; }
+        public int TargetCount { get; }
 
         public IReadOnlyList<ShapeSearchRoundItem> Items => _items;
 
-        public static ShapeSearchRound Create(int seed, ShapeSearchLayout layout)
+        public static ShapeSearchRound Create(int seed, ShapeSearchLayout layout, int targetCount)
         {
             if (layout == null)
             {
                 throw new ArgumentNullException(nameof(layout));
             }
 
-            if (layout.Items.Count != ShapeSearchLayout.ItemCount)
-            {
-                throw new ArgumentException("Shape Search layout must contain 20 items.", nameof(layout));
-            }
+            if (targetCount <= 0 || targetCount > ShapeSearchLayout.RegionCount || targetCount >= layout.Items.Count)
+                throw new ArgumentOutOfRangeException(nameof(targetCount));
 
             var random = new System.Random(unchecked((seed * 486187739) ^ 0x35B193));
             var shapes = (ShapeSearchShape[])Enum.GetValues(typeof(ShapeSearchShape));
             ShapeSearchShape targetShape = shapes[random.Next(shapes.Length)];
-            var targetIndices = SelectTargetIndices(layout, random);
-            var distractors = CreateBalancedDistractors(targetShape, random);
-            var items = new List<ShapeSearchRoundItem>(ShapeSearchLayout.ItemCount);
+            var targetIndices = SelectTargetIndices(layout, targetCount, random);
+            var distractors = CreateBalancedDistractors(targetShape, layout.Items.Count - targetCount, random);
+            var items = new List<ShapeSearchRoundItem>(layout.Items.Count);
             var distractorIndex = 0;
 
             for (var index = 0; index < layout.Items.Count; index++)
@@ -57,16 +55,21 @@ namespace EyeTraining.Exercises.VisualSearch
                     isTarget));
             }
 
-            return new ShapeSearchRound(targetShape, items.AsReadOnly());
+            return new ShapeSearchRound(targetShape, targetCount, items.AsReadOnly());
         }
 
         private static HashSet<int> SelectTargetIndices(
             ShapeSearchLayout layout,
+            int targetCount,
             System.Random random)
         {
             var targets = new HashSet<int>();
-            for (var region = 0; region < TargetCount; region++)
+            var regions = new List<int>();
+            for (var region = 0; region < ShapeSearchLayout.RegionCount; region++) regions.Add(region);
+            Shuffle(regions, random);
+            for (var selectedRegion = 0; selectedRegion < targetCount; selectedRegion++)
             {
+                int region = regions[selectedRegion];
                 var candidates = new List<int>();
                 for (var index = 0; index < layout.Items.Count; index++)
                 {
@@ -89,6 +92,7 @@ namespace EyeTraining.Exercises.VisualSearch
 
         private static List<ShapeSearchShape> CreateBalancedDistractors(
             ShapeSearchShape targetShape,
+            int distractorCount,
             System.Random random)
         {
             var available = new List<ShapeSearchShape>();
@@ -101,8 +105,8 @@ namespace EyeTraining.Exercises.VisualSearch
             }
 
             Shuffle(available, random);
-            var result = new List<ShapeSearchShape>(DistractorCount);
-            for (var index = 0; index < DistractorCount; index++)
+            var result = new List<ShapeSearchShape>(distractorCount);
+            for (var index = 0; index < distractorCount; index++)
             {
                 result.Add(available[index % available.Count]);
             }

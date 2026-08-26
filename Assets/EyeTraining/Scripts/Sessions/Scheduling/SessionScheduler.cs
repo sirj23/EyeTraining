@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using EyeTraining.Sessions.Progression.Tracking;
 using EyeTraining.Sessions.Progression.Saccades;
+using EyeTraining.Sessions.Progression.VisualSearch;
 using EyeTraining.Sessions.Rotation;
 using EyeTraining.Sessions.Unlocking;
 
@@ -18,6 +19,7 @@ namespace EyeTraining.Sessions.Scheduling
         private readonly RotationService _rotationService;
         private readonly TrackingProgressionService _progressionService;
         private readonly NumberJourneyProgressionService _numberJourneyProgressionService;
+        private readonly ShapeSearchProgressionService _shapeSearchProgressionService;
         private readonly TrackingExerciseCatalog _trackingCatalog;
         private readonly ITrackingDurationEstimator _durationEstimator;
         private readonly ILandoltSchedulePolicy _landoltSchedulePolicy;
@@ -27,6 +29,7 @@ namespace EyeTraining.Sessions.Scheduling
             RotationService rotationService,
             TrackingProgressionService progressionService,
             NumberJourneyProgressionService numberJourneyProgressionService,
+            ShapeSearchProgressionService shapeSearchProgressionService,
             TrackingExerciseCatalog trackingCatalog,
             ITrackingDurationEstimator durationEstimator,
             ILandoltSchedulePolicy landoltSchedulePolicy)
@@ -37,6 +40,8 @@ namespace EyeTraining.Sessions.Scheduling
                 ?? throw new ArgumentNullException(nameof(progressionService));
             _numberJourneyProgressionService = numberJourneyProgressionService
                 ?? throw new ArgumentNullException(nameof(numberJourneyProgressionService));
+            _shapeSearchProgressionService = shapeSearchProgressionService
+                ?? throw new ArgumentNullException(nameof(shapeSearchProgressionService));
             _trackingCatalog = trackingCatalog
                 ?? throw new ArgumentNullException(nameof(trackingCatalog));
             _durationEstimator = durationEstimator
@@ -91,6 +96,10 @@ namespace EyeTraining.Sessions.Scheduling
             bool includeNewShapeSearch = Contains(
                 stateAtCurrentThreshold.NewlyUnlockedExerciseIds,
                 SessionSchedulingDefinitions.VisualSearchShapeSearchId);
+            ShapeSearchProgressionState shapeSearchProgression =
+                _shapeSearchProgressionService.GetState(
+                    request.ShapeSearchProgressionHistory,
+                    request.CurrentSessionNumber);
             bool includeLandolt = _landoltSchedulePolicy.ShouldSchedule(request.CurrentSessionNumber);
 
             TimeSpan requiredDuration = SessionSchedulingDefinitions.PreparationBasic.EstimatedDuration.Value
@@ -99,7 +108,7 @@ namespace EyeTraining.Sessions.Scheduling
                     ? numberJourneyProgression.Settings.EstimatedDuration
                     : TimeSpan.Zero)
                 + (includeNewShapeSearch
-                    ? SessionSchedulingDefinitions.VisualSearchShapeSearch.EstimatedDuration.Value
+                    ? shapeSearchProgression.Settings.EstimatedDuration
                     : TimeSpan.Zero)
                 + (includeLandolt
                     ? SessionSchedulingDefinitions.LandoltStandard.EstimatedDuration.Value
@@ -125,6 +134,7 @@ namespace EyeTraining.Sessions.Scheduling
                 includeNewNumberJourney,
                 numberJourneyProgression.Settings,
                 includeNewShapeSearch,
+                shapeSearchProgression.Settings,
                 includeLandolt);
             var plan = new SessionPlan(sessionType, exercises);
 
@@ -207,6 +217,7 @@ namespace EyeTraining.Sessions.Scheduling
             bool includeNewNumberJourney,
             NumberJourneyLevelSettings numberJourneySettings,
             bool includeNewShapeSearch,
+            ShapeSearchLevelSettings shapeSearchSettings,
             bool includeLandolt)
         {
             var exercises = new List<PlannedExercise>();
@@ -245,9 +256,10 @@ namespace EyeTraining.Sessions.Scheduling
             {
                 exercises.Add(new PlannedExercise(
                     SessionSchedulingDefinitions.VisualSearchShapeSearch,
-                    SessionSchedulingDefinitions.VisualSearchShapeSearch.EstimatedDuration.Value,
+                    shapeSearchSettings.EstimatedDuration,
                     order++,
-                    SessionExerciseRole.Main));
+                    SessionExerciseRole.Main,
+                    shapeSearchSettings));
             }
 
             if (includeLandolt)

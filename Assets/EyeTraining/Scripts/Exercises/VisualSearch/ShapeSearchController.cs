@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using EyeTraining.Core;
 using EyeTraining.Sessions.History;
+using EyeTraining.Sessions.Progression.VisualSearch;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -23,8 +24,8 @@ namespace EyeTraining.Exercises.VisualSearch
 
         private const float CountdownStepDuration = 0.7f;
         private const float IncorrectFeedbackDuration = 0.25f;
-        private const float BoardShapeHeightFraction = 0.066f;
         private const float PatternHeightFraction = 0.088f;
+        private const int MaximumBoardItemCount = 32;
 
         private static readonly Color BackgroundColor = new(0.025f, 0.04f, 0.065f, 1f);
         private static readonly Color NeutralShapeColor = new(0.66f, 0.72f, 0.79f, 1f);
@@ -41,6 +42,8 @@ namespace EyeTraining.Exercises.VisualSearch
 
         [Header("Debug")]
         [SerializeField] private int debugShapeSearchSeed = 1;
+        [Range(0, 5)]
+        [SerializeField] private int debugShapeSearchLevel;
         [SerializeField] private bool debugShowTargetDistribution;
 
         private readonly List<BoardItemView> boardItems = new();
@@ -61,8 +64,10 @@ namespace EyeTraining.Exercises.VisualSearch
         private ExercisePhase phase;
         private string exerciseId;
         private bool sessionManaged;
+        private ShapeSearchLevelSettings settings;
 
         public int DebugShapeSearchSeed => debugShapeSearchSeed;
+        public int DebugShapeSearchLevel => debugShapeSearchLevel;
 
         public ShapeSearchExerciseResult LastResult { get; private set; }
 
@@ -86,7 +91,8 @@ namespace EyeTraining.Exercises.VisualSearch
         public void Begin(
             SessionGuidanceMode guidanceMode,
             string currentExerciseId,
-            int seed)
+            int seed,
+            ShapeSearchLevelSettings levelSettings)
         {
             if (string.IsNullOrWhiteSpace(currentExerciseId))
             {
@@ -94,6 +100,7 @@ namespace EyeTraining.Exercises.VisualSearch
             }
 
             _ = guidanceMode;
+            settings = levelSettings ?? throw new ArgumentNullException(nameof(levelSettings));
             exerciseId = currentExerciseId;
             sessionManaged = true;
             LastResult = null;
@@ -101,8 +108,12 @@ namespace EyeTraining.Exercises.VisualSearch
 
             RectTransform canvasRect = (RectTransform)canvas.transform;
             float aspectRatio = canvasRect.rect.width / canvasRect.rect.height;
-            ShapeSearchLayout layout = ShapeSearchLayout.Create(seed, aspectRatio);
-            round = ShapeSearchRound.Create(seed, layout);
+            ShapeSearchLayout layout = ShapeSearchLayout.Create(
+                seed,
+                aspectRatio,
+                settings.ObjectCount,
+                settings.ObjectSizeViewportHeight);
+            round = ShapeSearchRound.Create(seed, layout, settings.TargetCount);
             progress = new ShapeSearchProgress(round);
             ApplyRound(canvasRect.rect.height);
 
@@ -223,10 +234,10 @@ namespace EyeTraining.Exercises.VisualSearch
                 ExerciseCompletionStatus.Completed,
                 progress.CorrectSelections,
                 progress.ErrorCount,
-                ShapeSearchRound.TargetCount);
+                round.TargetCount);
             summaryText.text =
                 "Ćwiczenie zakończone\n\n"
-                + $"Znalezione: {progress.CorrectSelections}/{ShapeSearchRound.TargetCount}\n"
+                + $"Znalezione: {progress.CorrectSelections}/{round.TargetCount}\n"
                 + $"Błędy: {progress.ErrorCount}";
             summaryText.gameObject.SetActive(true);
             continueButton.gameObject.SetActive(true);
@@ -246,7 +257,7 @@ namespace EyeTraining.Exercises.VisualSearch
                 ExerciseCompletionStatus.Interrupted,
                 progress.CorrectSelections,
                 progress.ErrorCount,
-                ShapeSearchRound.TargetCount);
+                round.TargetCount);
             ResultReady?.Invoke(LastResult);
             ExitToHome();
         }
@@ -272,13 +283,16 @@ namespace EyeTraining.Exercises.VisualSearch
 
         private void ApplyRound(float canvasHeight)
         {
-            float itemSize = canvasHeight * BoardShapeHeightFraction;
+            float itemSize = canvasHeight * settings.ObjectSizeViewportHeight;
             float patternSize = canvasHeight * PatternHeightFraction;
             patternGraphic.Shape = round.TargetShape;
             patternGraphic.rectTransform.sizeDelta = Vector2.one * patternSize;
 
-            for (var index = 0; index < round.Items.Count; index++)
+            for (var index = 0; index < boardItems.Count; index++)
             {
+                bool used = index < round.Items.Count;
+                boardItems[index].Graphic.gameObject.SetActive(used);
+                if (!used) continue;
                 ShapeSearchRoundItem item = round.Items[index];
                 BoardItemView view = boardItems[index];
                 view.Graphic.Shape = item.Shape;
@@ -314,7 +328,8 @@ namespace EyeTraining.Exercises.VisualSearch
             interruptButton.gameObject.SetActive(visible);
             for (var index = 0; index < boardItems.Count; index++)
             {
-                boardItems[index].Graphic.gameObject.SetActive(visible);
+                boardItems[index].Graphic.gameObject.SetActive(
+                    visible && round != null && index < round.Items.Count);
             }
         }
 
@@ -328,7 +343,7 @@ namespace EyeTraining.Exercises.VisualSearch
 
         private void UpdateFoundText()
         {
-            foundText.text = $"Znalezione: {progress.CorrectSelections}/{ShapeSearchRound.TargetCount}";
+            foundText.text = $"Znalezione: {progress.CorrectSelections}/{round.TargetCount}";
         }
 
         private void StopActiveRoutine()
@@ -366,7 +381,7 @@ namespace EyeTraining.Exercises.VisualSearch
                 new Vector2(0.22f, 0.40f), new Vector2(0.78f, 0.70f));
 
             CreatePatternPanel();
-            for (var index = 0; index < ShapeSearchLayout.ItemCount; index++)
+            for (var index = 0; index < MaximumBoardItemCount; index++)
             {
                 CreateBoardItem(index);
             }

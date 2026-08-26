@@ -9,6 +9,7 @@ using EyeTraining.Save;
 using EyeTraining.Sessions.History;
 using EyeTraining.Sessions.Progression.Tracking;
 using EyeTraining.Sessions.Progression.Saccades;
+using EyeTraining.Sessions.Progression.VisualSearch;
 using EyeTraining.Sessions.Rotation;
 using EyeTraining.Sessions.Scheduling;
 using EyeTraining.Sessions.Unlocking;
@@ -35,6 +36,7 @@ namespace EyeTraining.Sessions.Runtime
         private SessionScheduler scheduler;
         private TrackingExerciseCatalog trackingCatalog;
         private NumberJourneyProgressionService numberJourneyProgressionService;
+        private ShapeSearchProgressionService shapeSearchProgressionService;
         private UserProfile activeProfile;
         private SessionGuidanceMode guidanceMode;
         private DateTimeOffset pendingSessionStartDate;
@@ -80,11 +82,14 @@ namespace EyeTraining.Sessions.Runtime
                 DefaultTrackingProgressionPlan.Create());
             numberJourneyProgressionService = new NumberJourneyProgressionService(
                 DefaultNumberJourneyProgressionPlan.Create());
+            shapeSearchProgressionService = new ShapeSearchProgressionService(
+                DefaultShapeSearchProgressionPlan.Create());
             scheduler = new SessionScheduler(
                 new UnlockService(DefaultUnlockPlan.Create()),
                 new RotationService(new TrackingRotationCatalog()),
                 progressionService,
                 numberJourneyProgressionService,
+                shapeSearchProgressionService,
                 trackingCatalog,
                 new ReferenceTrackingDurationEstimator(trackingCatalog),
                 new DefaultLandoltSchedulePolicy());
@@ -163,7 +168,8 @@ namespace EyeTraining.Sessions.Runtime
                     snapshot.State.CompletedSessionCount,
                     TrainingHistoryMapper.ToRotationHistory(snapshot),
                     TrainingHistoryMapper.ToTrackingProgressionHistory(snapshot),
-                    TrainingHistoryMapper.ToNumberJourneyProgressionHistory(snapshot));
+                    TrainingHistoryMapper.ToNumberJourneyProgressionHistory(snapshot),
+                    TrainingHistoryMapper.ToShapeSearchProgressionHistory(snapshot));
                 SessionScheduleResult result = scheduler.Schedule(request);
                 if (!result.IsSuccess)
                 {
@@ -289,7 +295,9 @@ namespace EyeTraining.Sessions.Runtime
             shapeSearchController.Begin(
                 guidanceMode,
                 SessionSchedulingDefinitions.VisualSearchShapeSearchId,
-                shapeSearchController.DebugShapeSearchSeed);
+                shapeSearchController.DebugShapeSearchSeed,
+                shapeSearchProgressionService.GetSettings(
+                    shapeSearchController.DebugShapeSearchLevel));
         }
 
         public void AbortSession()
@@ -467,12 +475,19 @@ namespace EyeTraining.Sessions.Runtime
 
         private void StartShapeSearch()
         {
+            if (CurrentPlannedExercise.Parameters is not ShapeSearchLevelSettings settings)
+            {
+                Fail("Shape Search has invalid progression parameters.");
+                trackingExerciseController.ShowSessionError("Nie udało się uruchomić ćwiczenia.");
+                return;
+            }
             Phase = SessionRuntimePhase.RunningExercise;
             Debug.Log("[SessionRuntime] Starting: " + CurrentPlannedExercise.Definition.Id);
             shapeSearchController.Begin(
                 guidanceMode,
                 CurrentPlannedExercise.Definition.Id,
-                CurrentSessionNumber);
+                CurrentSessionNumber,
+                settings);
         }
 
         private void HandlePreparationCompleted()
@@ -699,7 +714,7 @@ namespace EyeTraining.Sessions.Runtime
                 activeProfile.Id,
                 result.ExerciseId,
                 CurrentSessionNumber,
-                null,
+                ((ShapeSearchLevelSettings)CurrentPlannedExercise.Parameters).Level,
                 result.CompletionStatus,
                 ExerciseFeedback.None,
                 DateTimeOffset.Now);

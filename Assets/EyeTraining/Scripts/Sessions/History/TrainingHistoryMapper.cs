@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using EyeTraining.Sessions.Progression.Tracking;
 using EyeTraining.Sessions.Progression.Saccades;
+using EyeTraining.Sessions.Progression.VisualSearch;
 using EyeTraining.Sessions.Rotation;
 using EyeTraining.Sessions.Unlocking;
 
@@ -101,6 +102,25 @@ namespace EyeTraining.Sessions.History
             }
 
             return new NumberJourneyProgressionHistory(entries);
+        }
+
+        public static ShapeSearchProgressionHistory ToShapeSearchProgressionHistory(
+            TrainingHistorySnapshot snapshot)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            var entries = new List<ShapeSearchProgressionEntry>();
+            foreach (ExerciseHistoryEntry entry in snapshot.Entries)
+            {
+                if (!string.Equals(entry.ExerciseId, ExerciseIds.VisualSearchShapeSearch, StringComparison.Ordinal))
+                    continue;
+
+                // Pre-progression Shape Search entries used the current L0 parameters.
+                entries.Add(new ShapeSearchProgressionEntry(
+                    entry.CompletedSessionNumber,
+                    entry.AppliedLevel ?? 0,
+                    entry.CompletionStatus));
+            }
+            return new ShapeSearchProgressionHistory(entries);
         }
     }
 }
