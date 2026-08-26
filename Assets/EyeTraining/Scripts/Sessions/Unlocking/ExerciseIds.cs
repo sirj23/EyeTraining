@@ -30,6 +30,7 @@ namespace EyeTraining.Sessions.Unlocking
 
         public const string SaccadesNumberJourney = "saccades.number-journey";
         public const string VisualSearchShapeSearch = "visual-search.shape-search";
+        public const string PeripheralEdgeSignals = "peripheral.edge-signals";
 
         private static readonly IReadOnlyList<string> TrackingIds = Array.AsReadOnly(new[]
         {

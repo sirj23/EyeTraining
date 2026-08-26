@@ -4,6 +4,7 @@ using EyeTraining.Exercises;
 using EyeTraining.Exercises.Landolt;
 using EyeTraining.Exercises.Saccades;
 using EyeTraining.Exercises.VisualSearch;
+using EyeTraining.Exercises.Peripheral;
 using EyeTraining.Profiles;
 using EyeTraining.Save;
 using EyeTraining.Sessions.History;
@@ -26,6 +27,7 @@ namespace EyeTraining.Sessions.Runtime
         [SerializeField] private LandoltExerciseController landoltExerciseController;
         [SerializeField] private NumberJourneyController numberJourneyController;
         [SerializeField] private ShapeSearchController shapeSearchController;
+        [SerializeField] private EdgeSignalsController edgeSignalsController;
 
         [Header("Development")]
         [SerializeField] private SessionDebugMode debugMode;
@@ -46,6 +48,7 @@ namespace EyeTraining.Sessions.Runtime
         private bool debugLandoltOnlyActive;
         private bool debugNumberJourneyOnlyActive;
         private bool debugShapeSearchOnlyActive;
+        private bool debugEdgeSignalsOnlyActive;
 
         public SessionRuntimePhase Phase { get; private set; } = SessionRuntimePhase.Inactive;
 
@@ -75,6 +78,7 @@ namespace EyeTraining.Sessions.Runtime
             landoltExerciseController ??= GetComponent<LandoltExerciseController>();
             numberJourneyController ??= GetComponent<NumberJourneyController>();
             shapeSearchController ??= GetComponent<ShapeSearchController>();
+            edgeSignalsController ??= GetComponent<EdgeSignalsController>();
 
             repository = new JsonTrainingHistoryRepository();
             trackingCatalog = new TrackingExerciseCatalog();
@@ -104,6 +108,8 @@ namespace EyeTraining.Sessions.Runtime
             numberJourneyController.ContinueRequested += HandleContinueRequested;
             shapeSearchController.ResultReady += HandleShapeSearchResult;
             shapeSearchController.ContinueRequested += HandleContinueRequested;
+            edgeSignalsController.ResultReady += HandleEdgeSignalsResult;
+            edgeSignalsController.ContinueRequested += HandleContinueRequested;
         }
 
         private void OnDestroy()
@@ -136,6 +142,12 @@ namespace EyeTraining.Sessions.Runtime
             {
                 shapeSearchController.ResultReady -= HandleShapeSearchResult;
                 shapeSearchController.ContinueRequested -= HandleContinueRequested;
+            }
+
+            if (edgeSignalsController != null)
+            {
+                edgeSignalsController.ResultReady -= HandleEdgeSignalsResult;
+                edgeSignalsController.ContinueRequested -= HandleContinueRequested;
             }
         }
 
@@ -247,6 +259,12 @@ namespace EyeTraining.Sessions.Runtime
                 return;
             }
 
+            if (debugMode == SessionDebugMode.EdgeSignalsOnly)
+            {
+                StartDebugEdgeSignalsOnly();
+                return;
+            }
+
             AdvanceToNextExercise();
         }
 
@@ -298,6 +316,22 @@ namespace EyeTraining.Sessions.Runtime
                 shapeSearchController.DebugShapeSearchSeed,
                 shapeSearchProgressionService.GetSettings(
                     shapeSearchController.DebugShapeSearchLevel));
+        }
+
+        private void StartDebugEdgeSignalsOnly()
+        {
+            debugEdgeSignalsOnlyActive = true;
+            currentStepResultReceived = false;
+            CurrentExerciseIndex = -1;
+            CurrentPlannedExercise = null;
+            Phase = SessionRuntimePhase.RunningExercise;
+            Debug.Log(
+                "[SessionRuntime] Development mode: starting Edge Signals only; "
+                + "persistence disabled.");
+            edgeSignalsController.Begin(
+                guidanceMode,
+                ExerciseIds.PeripheralEdgeSignals,
+                edgeSignalsController.DebugEdgeSignalsSeed);
         }
 
         public void AbortSession()
@@ -722,6 +756,30 @@ namespace EyeTraining.Sessions.Runtime
             Phase = SessionRuntimePhase.WaitingForContinue;
         }
 
+        private void HandleEdgeSignalsResult(EdgeSignalsExerciseResult result)
+        {
+            if (Phase != SessionRuntimePhase.RunningExercise
+                || currentStepResultReceived
+                || !debugEdgeSignalsOnlyActive)
+            {
+                return;
+            }
+
+            currentStepResultReceived = true;
+            Debug.Log(
+                $"[SessionRuntime] Development Edge Signals result: "
+                + $"{result.CompletionStatus} / {result.DetectedCount}/{result.TrialCount}; "
+                + "not persisted.");
+            if (result.CompletionStatus == ExerciseCompletionStatus.Interrupted)
+            {
+                AbortSession();
+            }
+            else
+            {
+                Phase = SessionRuntimePhase.WaitingForContinue;
+            }
+        }
+
         private void HandleContinueRequested()
         {
             if (Phase != SessionRuntimePhase.WaitingForContinue || !currentStepResultReceived)
@@ -758,6 +816,18 @@ namespace EyeTraining.Sessions.Runtime
                 ClearPendingSession();
                 Debug.Log(
                     "[SessionRuntime] Development Shape Search-only run completed "
+                    + "without saving.");
+                PreparedSessionChanged?.Invoke();
+                return;
+            }
+
+            if (debugEdgeSignalsOnlyActive)
+            {
+                edgeSignalsController.ExitToHome();
+                Phase = SessionRuntimePhase.Aborted;
+                ClearPendingSession();
+                Debug.Log(
+                    "[SessionRuntime] Development Edge Signals-only run completed "
                     + "without saving.");
                 PreparedSessionChanged?.Invoke();
                 return;
@@ -825,6 +895,7 @@ namespace EyeTraining.Sessions.Runtime
             debugLandoltOnlyActive = false;
             debugNumberJourneyOnlyActive = false;
             debugShapeSearchOnlyActive = false;
+            debugEdgeSignalsOnlyActive = false;
         }
     }
 }

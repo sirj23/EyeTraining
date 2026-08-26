@@ -5,6 +5,7 @@ namespace EyeTraining.Sessions.Runtime
         Normal,
         LandoltOnly,
         NumberJourneyOnly,
-        ShapeSearchOnly
+        ShapeSearchOnly,
+        EdgeSignalsOnly
     }
 }
