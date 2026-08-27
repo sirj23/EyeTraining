@@ -637,6 +637,7 @@ MonoBehaviour:
   buttonTemplate: {fileID: 771989337}
   homeStartTrainingButton: {fileID: 1086314225}
   debugEdgeSignalsSeed: 1
+  debugEdgeSignalsLevel: 0
   debugFixedDirection: 0
   debugDirection: 0
 --- !u!1 &9106798

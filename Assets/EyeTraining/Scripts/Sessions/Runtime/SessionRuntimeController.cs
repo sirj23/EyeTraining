@@ -5,6 +5,7 @@ using EyeTraining.Exercises.Landolt;
 using EyeTraining.Exercises.Saccades;
 using EyeTraining.Exercises.VisualSearch;
 using EyeTraining.Exercises.Peripheral;
+using EyeTraining.Sessions.Progression.Peripheral;
 using EyeTraining.Profiles;
 using EyeTraining.Save;
 using EyeTraining.Sessions.History;
@@ -49,6 +50,7 @@ namespace EyeTraining.Sessions.Runtime
         private bool debugNumberJourneyOnlyActive;
         private bool debugShapeSearchOnlyActive;
         private bool debugEdgeSignalsOnlyActive;
+        private EdgeSignalsProgressionService edgeSignalsProgressionService;
 
         public SessionRuntimePhase Phase { get; private set; } = SessionRuntimePhase.Inactive;
 
@@ -79,6 +81,7 @@ namespace EyeTraining.Sessions.Runtime
             numberJourneyController ??= GetComponent<NumberJourneyController>();
             shapeSearchController ??= GetComponent<ShapeSearchController>();
             edgeSignalsController ??= GetComponent<EdgeSignalsController>();
+            edgeSignalsProgressionService = new EdgeSignalsProgressionService(DefaultEdgeSignalsProgressionPlan.Create());
 
             repository = new JsonTrainingHistoryRepository();
             trackingCatalog = new TrackingExerciseCatalog();
@@ -331,7 +334,8 @@ namespace EyeTraining.Sessions.Runtime
             edgeSignalsController.Begin(
                 guidanceMode,
                 ExerciseIds.PeripheralEdgeSignals,
-                edgeSignalsController.DebugEdgeSignalsSeed);
+                edgeSignalsController.DebugEdgeSignalsSeed,
+                edgeSignalsProgressionService.GetSettings(edgeSignalsController.DebugEdgeSignalsLevel));
         }
 
         public void AbortSession()

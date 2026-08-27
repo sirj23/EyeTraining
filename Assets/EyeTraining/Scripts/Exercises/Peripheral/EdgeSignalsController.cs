@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using EyeTraining.Core;
 using EyeTraining.Sessions.History;
+using EyeTraining.Sessions.Progression.Peripheral;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -21,9 +22,6 @@ namespace EyeTraining.Exercises.Peripheral
             Completed
         }
 
-        private const float CountdownStepDuration = 0.7f;
-        private const float StimulusVisibleDuration = 0.60f;
-        private const float ResponseWindowDuration = 0.85f;
         private const float FixationSizeViewportHeight = 0.027f;
 
         private static readonly Color BackgroundColor = new(0.025f, 0.04f, 0.065f, 1f);
@@ -39,6 +37,7 @@ namespace EyeTraining.Exercises.Peripheral
 
         [Header("Debug")]
         [SerializeField] private int debugEdgeSignalsSeed = 1;
+        [SerializeField, Range(0, 5)] private int debugEdgeSignalsLevel;
         [SerializeField] private bool debugFixedDirection;
         [SerializeField] private PeripheralDirection debugDirection;
 
@@ -59,8 +58,10 @@ namespace EyeTraining.Exercises.Peripheral
         private ExercisePhase phase;
         private string exerciseId;
         private bool sessionManaged;
+        private EdgeSignalsLevelSettings settings;
 
         public int DebugEdgeSignalsSeed => debugEdgeSignalsSeed;
+        public int DebugEdgeSignalsLevel => debugEdgeSignalsLevel;
         public EdgeSignalsExerciseResult LastResult { get; private set; }
         public event Action<EdgeSignalsExerciseResult> ResultReady;
         public event Action ContinueRequested;
@@ -96,21 +97,24 @@ namespace EyeTraining.Exercises.Peripheral
                 round.TryRespond(Time.realtimeSinceStartupAsDouble);
         }
 
-        public void Begin(SessionGuidanceMode guidanceMode, string currentExerciseId, int seed)
+        public void Begin(SessionGuidanceMode guidanceMode, string currentExerciseId, int seed,
+            EdgeSignalsLevelSettings levelSettings)
         {
             if (string.IsNullOrWhiteSpace(currentExerciseId))
                 throw new ArgumentException("Exercise ID cannot be empty.", nameof(currentExerciseId));
 
             _ = guidanceMode;
+            settings = levelSettings ?? throw new ArgumentNullException(nameof(levelSettings));
             exerciseId = currentExerciseId;
             sessionManaged = true;
             LastResult = null;
             StopActiveRoutine();
             sequence = PeripheralStimulusSequence.Create(
                 seed,
+                settings,
                 debugFixedDirection,
                 debugDirection);
-            round = new EdgeSignalsRound();
+            round = new EdgeSignalsRound(settings.TrialCount, settings.ResponseWindow);
             trackingExerciseScreen.SetActive(false);
             homeScreen.SetActive(false);
             root.SetActive(true);
@@ -143,7 +147,7 @@ namespace EyeTraining.Exercises.Peripheral
             for (var number = 3; number >= 1; number--)
             {
                 countdownText.text = number.ToString();
-                yield return new WaitForSecondsRealtime(CountdownStepDuration);
+                yield return new WaitForSecondsRealtime(EdgeSignalsLevelSettings.CountdownStepDuration);
             }
 
             countdownText.gameObject.SetActive(false);
@@ -155,7 +159,7 @@ namespace EyeTraining.Exercises.Peripheral
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
 
             RectTransform canvasRect = (RectTransform)canvas.transform;
-            float stimulusSize = canvasRect.rect.height * PeripheralLayout.StimulusSizeViewportHeight;
+            float stimulusSize = canvasRect.rect.height * settings.StimulusSizeViewportHeight;
             float fixationSize = canvasRect.rect.height * FixationSizeViewportHeight;
             stimulusGraphic.rectTransform.sizeDelta = Vector2.one * stimulusSize;
             fixationGraphic.rectTransform.sizeDelta = Vector2.one * fixationSize;
@@ -165,17 +169,17 @@ namespace EyeTraining.Exercises.Peripheral
                 yield return new WaitForSecondsRealtime(trial.DelayBeforeStimulus);
                 RectTransform stimulusRect = stimulusGraphic.rectTransform;
                 stimulusRect.anchorMin = stimulusRect.anchorMax =
-                    PeripheralLayout.GetViewportPosition(trial.Direction);
+                    PeripheralLayout.GetViewportPosition(trial.Direction, settings);
                 stimulusRect.anchoredPosition = Vector2.zero;
                 double appearedAt = Time.realtimeSinceStartupAsDouble;
                 round.BeginTrial(appearedAt);
                 stimulusGraphic.gameObject.SetActive(true);
 
                 bool stimulusHidden = false;
-                while (Time.realtimeSinceStartupAsDouble - appearedAt < ResponseWindowDuration)
+                while (Time.realtimeSinceStartupAsDouble - appearedAt < settings.ResponseWindow)
                 {
                     if (!stimulusHidden
-                        && Time.realtimeSinceStartupAsDouble - appearedAt >= StimulusVisibleDuration)
+                        && Time.realtimeSinceStartupAsDouble - appearedAt >= settings.StimulusVisibleDuration)
                     {
                         stimulusGraphic.gameObject.SetActive(false);
                         stimulusHidden = true;
@@ -199,7 +203,7 @@ namespace EyeTraining.Exercises.Peripheral
             interruptButton.gameObject.SetActive(false);
             LastResult = CreateResult(ExerciseCompletionStatus.Completed);
             summaryText.text = "Ćwiczenie zakończone\n\n"
-                + $"Zauważone: {round.DetectedCount}/{PeripheralStimulusSequence.TrialCount}\n"
+                + $"Zauważone: {round.DetectedCount}/{settings.TrialCount}\n"
                 + $"Pominięte: {round.MissedCount}";
             summaryText.gameObject.SetActive(true);
             continueButton.gameObject.SetActive(true);

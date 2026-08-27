@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
+using EyeTraining.Sessions.Progression.Peripheral;
 
 namespace EyeTraining.Exercises.Peripheral
 {
     public sealed class PeripheralStimulusSequence
     {
-        public const int TrialCount = 12;
         public const float MinimumDelay = 1.2f;
         public const float MaximumDelay = 2.2f;
         public const float InitialMinimumDelay = 1.5f;
@@ -22,18 +22,20 @@ namespace EyeTraining.Exercises.Peripheral
 
         public static PeripheralStimulusSequence Create(
             int seed,
+            EdgeSignalsLevelSettings settings,
             bool fixedDirection = false,
             PeripheralDirection direction = PeripheralDirection.Up)
         {
             if (!Enum.IsDefined(typeof(PeripheralDirection), direction))
                 throw new ArgumentOutOfRangeException(nameof(direction));
 
-            var random = new System.Random(seed);
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            var random = new System.Random(unchecked((seed * 397) ^ settings.Level));
             var directions = fixedDirection
-                ? CreateFixedDirections(direction)
-                : CreateBalancedDirections(random);
-            var trials = new List<PeripheralTrial>(TrialCount);
-            for (var index = 0; index < TrialCount; index++)
+                ? CreateFixedDirections(direction, settings.TrialCount)
+                : CreateBalancedDirections(random, settings.TrialCount);
+            var trials = new List<PeripheralTrial>(settings.TrialCount);
+            for (var index = 0; index < settings.TrialCount; index++)
             {
                 float minimum = index == 0 ? InitialMinimumDelay : MinimumDelay;
                 float maximum = index == 0 ? InitialMaximumDelay : MaximumDelay;
@@ -44,13 +46,15 @@ namespace EyeTraining.Exercises.Peripheral
             return new PeripheralStimulusSequence(trials.AsReadOnly());
         }
 
-        private static List<PeripheralDirection> CreateBalancedDirections(System.Random random)
+        private static List<PeripheralDirection> CreateBalancedDirections(System.Random random, int trialCount)
         {
-            var pool = new List<PeripheralDirection>(TrialCount);
-            foreach (PeripheralDirection direction in Enum.GetValues(typeof(PeripheralDirection)))
-                pool.Add(direction);
-            for (var index = pool.Count; index < TrialCount; index++)
-                pool.Add((PeripheralDirection)random.Next(8));
+            var all = (PeripheralDirection[])Enum.GetValues(typeof(PeripheralDirection));
+            var pool = new List<PeripheralDirection>(trialCount);
+            int completeSets = trialCount / all.Length;
+            for (var set = 0; set < completeSets; set++) pool.AddRange(all);
+            var extras = new List<PeripheralDirection>(all);
+            Shuffle(extras, random);
+            for (var index = 0; index < trialCount % all.Length; index++) pool.Add(extras[index]);
 
             for (var attempt = 0; attempt < 100; attempt++)
             {
@@ -61,10 +65,10 @@ namespace EyeTraining.Exercises.Peripheral
             throw new InvalidOperationException("Could not create a valid peripheral sequence.");
         }
 
-        private static List<PeripheralDirection> CreateFixedDirections(PeripheralDirection direction)
+        private static List<PeripheralDirection> CreateFixedDirections(PeripheralDirection direction, int trialCount)
         {
-            var result = new List<PeripheralDirection>(TrialCount);
-            for (var index = 0; index < TrialCount; index++) result.Add(direction);
+            var result = new List<PeripheralDirection>(trialCount);
+            for (var index = 0; index < trialCount; index++) result.Add(direction);
             return result;
         }
 

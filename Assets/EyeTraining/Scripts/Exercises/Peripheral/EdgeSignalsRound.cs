@@ -4,7 +4,8 @@ namespace EyeTraining.Exercises.Peripheral
 {
     public sealed class EdgeSignalsRound
     {
-        public const double ResponseWindowSeconds = 0.85d;
+        private readonly int trialCount;
+        private readonly double responseWindowSeconds;
 
         private bool responseWindowOpen;
         private bool currentTrialDetected;
@@ -15,7 +16,12 @@ namespace EyeTraining.Exercises.Peripheral
         public int DetectedCount { get; private set; }
         public int MissedCount { get; private set; }
         public bool IsInterrupted { get; private set; }
-        public bool IsComplete => CompletedTrialCount == PeripheralStimulusSequence.TrialCount;
+        public EdgeSignalsRound(int trialCount, double responseWindowSeconds)
+        {
+            if (trialCount <= 0 || responseWindowSeconds <= 0d) throw new ArgumentOutOfRangeException();
+            this.trialCount = trialCount; this.responseWindowSeconds = responseWindowSeconds;
+        }
+        public bool IsComplete => CompletedTrialCount == trialCount;
         public bool IsResponseWindowOpen => responseWindowOpen;
 
         public double? MeanReactionTimeSeconds => DetectedCount == 0
@@ -37,7 +43,7 @@ namespace EyeTraining.Exercises.Peripheral
         {
             if (!responseWindowOpen || currentTrialDetected) return false;
             double reactionTime = responseTime - stimulusAppearedAt;
-            if (reactionTime < 0d || reactionTime > ResponseWindowSeconds) return false;
+            if (reactionTime < 0d || reactionTime > responseWindowSeconds) return false;
             currentTrialDetected = true;
             DetectedCount++;
             totalReactionTime += reactionTime;
@@ -47,7 +53,7 @@ namespace EyeTraining.Exercises.Peripheral
         public void CloseTrial(double closeTime)
         {
             if (!responseWindowOpen) throw new InvalidOperationException("No trial is active.");
-            if (closeTime - stimulusAppearedAt + 0.000000001d < ResponseWindowSeconds)
+            if (closeTime - stimulusAppearedAt + 0.000000001d < responseWindowSeconds)
                 throw new ArgumentOutOfRangeException(nameof(closeTime));
             if (!currentTrialDetected) MissedCount++;
             CompletedTrialCount++;

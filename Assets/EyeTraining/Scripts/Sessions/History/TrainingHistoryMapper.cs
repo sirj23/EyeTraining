@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using EyeTraining.Sessions.Progression.Tracking;
 using EyeTraining.Sessions.Progression.Saccades;
 using EyeTraining.Sessions.Progression.VisualSearch;
+using EyeTraining.Sessions.Progression.Peripheral;
 using EyeTraining.Sessions.Rotation;
 using EyeTraining.Sessions.Unlocking;
 
@@ -121,6 +122,19 @@ namespace EyeTraining.Sessions.History
                     entry.CompletionStatus));
             }
             return new ShapeSearchProgressionHistory(entries);
+        }
+
+        public static EdgeSignalsProgressionHistory ToEdgeSignalsProgressionHistory(TrainingHistorySnapshot snapshot)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            var entries = new List<EdgeSignalsProgressionEntry>();
+            foreach (ExerciseHistoryEntry entry in snapshot.Entries)
+            {
+                if (!string.Equals(entry.ExerciseId, ExerciseIds.PeripheralEdgeSignals, StringComparison.Ordinal)) continue;
+                entries.Add(new EdgeSignalsProgressionEntry(entry.CompletedSessionNumber,
+                    entry.AppliedLevel ?? 0, entry.CompletionStatus));
+            }
+            return new EdgeSignalsProgressionHistory(entries);
         }
     }
 }
