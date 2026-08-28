@@ -73,6 +73,11 @@ namespace EyeTraining.Sessions.Unlocking
                     14,
                     new[] { ExerciseIds.VisualSearchShapeSearch },
                     new[] { ExerciseFamily.VisualSearch },
+                    UnlockStageKind.Major),
+                new UnlockStage(
+                    16,
+                    new[] { ExerciseIds.PeripheralEdgeSignals },
+                    new[] { ExerciseFamily.Peripheral },
                     UnlockStageKind.Major)
             });
         }

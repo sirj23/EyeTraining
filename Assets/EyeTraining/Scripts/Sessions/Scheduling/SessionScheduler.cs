@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using EyeTraining.Sessions.Progression.Tracking;
 using EyeTraining.Sessions.Progression.Saccades;
 using EyeTraining.Sessions.Progression.VisualSearch;
+using EyeTraining.Sessions.Progression.Peripheral;
 using EyeTraining.Sessions.Rotation;
+using EyeTraining.Sessions.Rotation.Returning;
 using EyeTraining.Sessions.Unlocking;
 
 namespace EyeTraining.Sessions.Scheduling
@@ -20,6 +22,10 @@ namespace EyeTraining.Sessions.Scheduling
         private readonly TrackingProgressionService _progressionService;
         private readonly NumberJourneyProgressionService _numberJourneyProgressionService;
         private readonly ShapeSearchProgressionService _shapeSearchProgressionService;
+        private readonly EdgeSignalsProgressionService _edgeSignalsProgressionService;
+        private readonly ReturningExerciseSelector _returningExerciseSelector;
+        private readonly MajorUnlockPacePolicy _majorUnlockPacePolicy;
+        private readonly DiversitySlotCadencePolicy _diversitySlotCadencePolicy;
         private readonly TrackingExerciseCatalog _trackingCatalog;
         private readonly ITrackingDurationEstimator _durationEstimator;
         private readonly ILandoltSchedulePolicy _landoltSchedulePolicy;
@@ -30,6 +36,10 @@ namespace EyeTraining.Sessions.Scheduling
             TrackingProgressionService progressionService,
             NumberJourneyProgressionService numberJourneyProgressionService,
             ShapeSearchProgressionService shapeSearchProgressionService,
+            EdgeSignalsProgressionService edgeSignalsProgressionService,
+            ReturningExerciseSelector returningExerciseSelector,
+            MajorUnlockPacePolicy majorUnlockPacePolicy,
+            DiversitySlotCadencePolicy diversitySlotCadencePolicy,
             TrackingExerciseCatalog trackingCatalog,
             ITrackingDurationEstimator durationEstimator,
             ILandoltSchedulePolicy landoltSchedulePolicy)
@@ -42,6 +52,15 @@ namespace EyeTraining.Sessions.Scheduling
                 ?? throw new ArgumentNullException(nameof(numberJourneyProgressionService));
             _shapeSearchProgressionService = shapeSearchProgressionService
                 ?? throw new ArgumentNullException(nameof(shapeSearchProgressionService));
+            _edgeSignalsProgressionService = edgeSignalsProgressionService
+                ?? throw new ArgumentNullException(nameof(edgeSignalsProgressionService));
+            _returningExerciseSelector = returningExerciseSelector
+                ?? throw new ArgumentNullException(nameof(returningExerciseSelector));
+            _majorUnlockPacePolicy = majorUnlockPacePolicy
+                ?? throw new ArgumentNullException(nameof(majorUnlockPacePolicy));
+            _diversitySlotCadencePolicy = diversitySlotCadencePolicy
+                ?? throw new ArgumentNullException(nameof(diversitySlotCadencePolicy));
+            _majorUnlockPacePolicy.Validate(_unlockService.Plan);
             _trackingCatalog = trackingCatalog
                 ?? throw new ArgumentNullException(nameof(trackingCatalog));
             _durationEstimator = durationEstimator
@@ -86,30 +105,32 @@ namespace EyeTraining.Sessions.Scheduling
             List<ScheduledTracking> newlyUnlocked = BuildTrackingExercises(
                 newTrackingIds,
                 request);
-            bool includeNewNumberJourney = Contains(
-                stateAtCurrentThreshold.NewlyUnlockedExerciseIds,
-                SessionSchedulingDefinitions.SaccadesNumberJourneyId);
-            NumberJourneyProgressionState numberJourneyProgression =
-                _numberJourneyProgressionService.GetState(
-                    request.NumberJourneyProgressionHistory,
-                    request.CurrentSessionNumber);
-            bool includeNewShapeSearch = Contains(
-                stateAtCurrentThreshold.NewlyUnlockedExerciseIds,
-                SessionSchedulingDefinitions.VisualSearchShapeSearchId);
-            ShapeSearchProgressionState shapeSearchProgression =
-                _shapeSearchProgressionService.GetState(
-                    request.ShapeSearchProgressionHistory,
-                    request.CurrentSessionNumber);
+            string newlyUnlockedAdditionalId = SelectNewAdditionalExercise(
+                stateAtCurrentThreshold.NewlyUnlockedExerciseIds);
+            int knownAdditionalCount = CountKnownAdditionalExercises(stateBefore.UnlockedExerciseIds);
+            bool cadenceAllowsSlot = _diversitySlotCadencePolicy.CanUseSlot(
+                request.CurrentSessionNumber, knownAdditionalCount, request.ReturningExerciseHistory);
+            if (newlyUnlockedAdditionalId != null && !cadenceAllowsSlot)
+                throw new InvalidOperationException("A configured major unlock violates diversity slot cadence.");
+            ScheduledAdditional additional = newlyUnlockedAdditionalId == null
+                ? null
+                : BuildAdditional(newlyUnlockedAdditionalId, true, request);
+            int? nextAdditionalUnlockSession = FindNextAdditionalUnlockSession(request.CurrentSessionNumber);
+            if (additional == null && cadenceAllowsSlot
+                && _diversitySlotCadencePolicy.ReturningWouldPreserveNextUnlock(
+                    request.CurrentSessionNumber, knownAdditionalCount, nextAdditionalUnlockSession))
+            {
+                string returningId = _returningExerciseSelector.Select(
+                    request.CurrentSessionNumber,
+                    stateBefore.UnlockedExerciseIds,
+                    request.ReturningExerciseHistory);
+                if (returningId != null) additional = BuildAdditional(returningId, false, request);
+            }
             bool includeLandolt = _landoltSchedulePolicy.ShouldSchedule(request.CurrentSessionNumber);
 
             TimeSpan requiredDuration = SessionSchedulingDefinitions.PreparationBasic.EstimatedDuration.Value
                 + SumDuration(newlyUnlocked)
-                + (includeNewNumberJourney
-                    ? numberJourneyProgression.Settings.EstimatedDuration
-                    : TimeSpan.Zero)
-                + (includeNewShapeSearch
-                    ? shapeSearchProgression.Settings.EstimatedDuration
-                    : TimeSpan.Zero)
+                + (additional != null && additional.IsNew ? additional.Duration : TimeSpan.Zero)
                 + (includeLandolt
                     ? SessionSchedulingDefinitions.LandoltStandard.EstimatedDuration.Value
                     : TimeSpan.Zero);
@@ -122,19 +143,33 @@ namespace EyeTraining.Sessions.Scheduling
                     rotationResult.SelectedExerciseIds.Count);
             }
 
-            int selectedBeforeTimeReduction = returning.Count;
+            bool wasReturningCountReducedForTime = false;
             while (requiredDuration + SumDuration(returning) > hardLimit)
             {
                 returning.RemoveAt(returning.Count - 1);
+                wasReturningCountReducedForTime = true;
+            }
+
+            ScheduledTracking displacedForDiversity = null;
+            if (additional != null && returning.Count > 0)
+            {
+                displacedForDiversity = returning[returning.Count - 1];
+                returning.RemoveAt(returning.Count - 1);
+            }
+
+            if (additional != null && !additional.IsNew
+                && requiredDuration + SumDuration(returning) + additional.Duration > hardLimit)
+            {
+                additional = null;
+                if (displacedForDiversity != null
+                    && requiredDuration + SumDuration(returning) + displacedForDiversity.Duration <= hardLimit)
+                    returning.Add(displacedForDiversity);
             }
 
             List<PlannedExercise> exercises = BuildOrderedPlan(
                 returning,
                 newlyUnlocked,
-                includeNewNumberJourney,
-                numberJourneyProgression.Settings,
-                includeNewShapeSearch,
-                shapeSearchProgression.Settings,
+                additional,
                 includeLandolt);
             var plan = new SessionPlan(sessionType, exercises);
 
@@ -146,7 +181,7 @@ namespace EyeTraining.Sessions.Scheduling
                 hardLimit,
                 TargetReturningTrackingCount,
                 returning.Count,
-                returning.Count < selectedBeforeTimeReduction);
+                wasReturningCountReducedForTime);
         }
 
         private List<ScheduledTracking> BuildTrackingExercises(
@@ -214,10 +249,7 @@ namespace EyeTraining.Sessions.Scheduling
         private static List<PlannedExercise> BuildOrderedPlan(
             IReadOnlyList<ScheduledTracking> returning,
             IReadOnlyList<ScheduledTracking> newlyUnlocked,
-            bool includeNewNumberJourney,
-            NumberJourneyLevelSettings numberJourneySettings,
-            bool includeNewShapeSearch,
-            ShapeSearchLevelSettings shapeSearchSettings,
+            ScheduledAdditional additional,
             bool includeLandolt)
         {
             var exercises = new List<PlannedExercise>();
@@ -242,24 +274,14 @@ namespace EyeTraining.Sessions.Scheduling
                 }
             }
 
-            if (includeNewNumberJourney)
+            if (additional != null)
             {
                 exercises.Add(new PlannedExercise(
-                    SessionSchedulingDefinitions.SaccadesNumberJourney,
-                    numberJourneySettings.EstimatedDuration,
+                    additional.Definition,
+                    additional.Duration,
                     order++,
                     SessionExerciseRole.Main,
-                    numberJourneySettings));
-            }
-
-            if (includeNewShapeSearch)
-            {
-                exercises.Add(new PlannedExercise(
-                    SessionSchedulingDefinitions.VisualSearchShapeSearch,
-                    shapeSearchSettings.EstimatedDuration,
-                    order++,
-                    SessionExerciseRole.Main,
-                    shapeSearchSettings));
+                    additional.Parameters));
             }
 
             if (includeLandolt)
@@ -285,6 +307,67 @@ namespace EyeTraining.Sessions.Scheduling
             }
 
             return false;
+        }
+
+        private string SelectNewAdditionalExercise(IReadOnlyList<string> ids)
+        {
+            string selected = null;
+            foreach (string id in ids)
+            {
+                if (!_majorUnlockPacePolicy.IsRelevantExercise(id)) continue;
+                if (selected != null) throw new InvalidOperationException("A session cannot unlock two non-Tracking exercises.");
+                selected = id;
+            }
+            return selected;
+        }
+
+        private int CountKnownAdditionalExercises(IReadOnlyList<string> ids)
+        {
+            var count = 0;
+            foreach (string id in ids)
+                if (_majorUnlockPacePolicy.IsRelevantExercise(id)) count++;
+            return count;
+        }
+
+        private int? FindNextAdditionalUnlockSession(int currentSessionNumber)
+        {
+            foreach (UnlockStage stage in _unlockService.Plan.Stages)
+            {
+                if (stage.RequiredCompletedSessions <= currentSessionNumber) continue;
+                foreach (string id in stage.ExerciseIds)
+                    if (_majorUnlockPacePolicy.IsRelevantExercise(id))
+                        return stage.RequiredCompletedSessions;
+            }
+            return null;
+        }
+
+        private ScheduledAdditional BuildAdditional(string exerciseId, bool isNew, SessionScheduleRequest request)
+        {
+            if (string.Equals(exerciseId, ExerciseIds.SaccadesNumberJourney, StringComparison.Ordinal))
+            {
+                NumberJourneyLevelSettings settings = _numberJourneyProgressionService.GetState(
+                    request.NumberJourneyProgressionHistory, request.CurrentSessionNumber).Settings;
+                return new ScheduledAdditional(isNew ? SessionSchedulingDefinitions.SaccadesNumberJourney
+                    : SessionSchedulingDefinitions.SaccadesNumberJourneyReturning, settings,
+                    settings.EstimatedDuration, isNew);
+            }
+            if (string.Equals(exerciseId, ExerciseIds.VisualSearchShapeSearch, StringComparison.Ordinal))
+            {
+                ShapeSearchLevelSettings settings = _shapeSearchProgressionService.GetState(
+                    request.ShapeSearchProgressionHistory, request.CurrentSessionNumber).Settings;
+                return new ScheduledAdditional(isNew ? SessionSchedulingDefinitions.VisualSearchShapeSearch
+                    : SessionSchedulingDefinitions.VisualSearchShapeSearchReturning, settings,
+                    settings.EstimatedDuration, isNew);
+            }
+            if (string.Equals(exerciseId, ExerciseIds.PeripheralEdgeSignals, StringComparison.Ordinal))
+            {
+                EdgeSignalsLevelSettings settings = _edgeSignalsProgressionService.GetState(
+                    request.EdgeSignalsProgressionHistory, request.CurrentSessionNumber).Settings;
+                return new ScheduledAdditional(isNew ? SessionSchedulingDefinitions.PeripheralEdgeSignals
+                    : SessionSchedulingDefinitions.PeripheralEdgeSignalsReturning, settings,
+                    settings.EstimatedDuration, isNew);
+            }
+            throw new ArgumentException("Unsupported non-Tracking exercise.", nameof(exerciseId));
         }
 
         private static PlannedExercise CreatePlannedTracking(
@@ -343,6 +426,17 @@ namespace EyeTraining.Sessions.Scheduling
             public TrackingExerciseParameters Parameters { get; }
 
             public TimeSpan Duration { get; }
+        }
+
+        private sealed class ScheduledAdditional
+        {
+            public ScheduledAdditional(ExerciseDefinition definition, IExerciseParameters parameters,
+                TimeSpan duration, bool isNew)
+            { Definition = definition; Parameters = parameters; Duration = duration; IsNew = isNew; }
+            public ExerciseDefinition Definition { get; }
+            public IExerciseParameters Parameters { get; }
+            public TimeSpan Duration { get; }
+            public bool IsNew { get; }
         }
     }
 }

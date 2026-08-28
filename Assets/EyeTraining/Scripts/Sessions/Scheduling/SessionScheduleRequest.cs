@@ -2,7 +2,9 @@ using System;
 using EyeTraining.Sessions.Progression.Tracking;
 using EyeTraining.Sessions.Progression.Saccades;
 using EyeTraining.Sessions.Progression.VisualSearch;
+using EyeTraining.Sessions.Progression.Peripheral;
 using EyeTraining.Sessions.Rotation;
+using EyeTraining.Sessions.Rotation.Returning;
 
 namespace EyeTraining.Sessions.Scheduling
 {
@@ -14,7 +16,9 @@ namespace EyeTraining.Sessions.Scheduling
             RotationHistory rotationHistory,
             TrackingProgressionHistory trackingProgressionHistory,
             NumberJourneyProgressionHistory numberJourneyProgressionHistory,
-            ShapeSearchProgressionHistory shapeSearchProgressionHistory)
+            ShapeSearchProgressionHistory shapeSearchProgressionHistory,
+            EdgeSignalsProgressionHistory edgeSignalsProgressionHistory,
+            ReturningExerciseHistory returningExerciseHistory)
         {
             if (currentSessionNumber <= 0)
             {
@@ -41,6 +45,10 @@ namespace EyeTraining.Sessions.Scheduling
                 ?? throw new ArgumentNullException(nameof(numberJourneyProgressionHistory));
             ShapeSearchProgressionHistory = shapeSearchProgressionHistory
                 ?? throw new ArgumentNullException(nameof(shapeSearchProgressionHistory));
+            EdgeSignalsProgressionHistory = edgeSignalsProgressionHistory
+                ?? throw new ArgumentNullException(nameof(edgeSignalsProgressionHistory));
+            ReturningExerciseHistory = returningExerciseHistory
+                ?? throw new ArgumentNullException(nameof(returningExerciseHistory));
         }
 
         public int CurrentSessionNumber { get; }
@@ -53,5 +61,7 @@ namespace EyeTraining.Sessions.Scheduling
 
         public NumberJourneyProgressionHistory NumberJourneyProgressionHistory { get; }
         public ShapeSearchProgressionHistory ShapeSearchProgressionHistory { get; }
+        public EdgeSignalsProgressionHistory EdgeSignalsProgressionHistory { get; }
+        public ReturningExerciseHistory ReturningExerciseHistory { get; }
     }
 }

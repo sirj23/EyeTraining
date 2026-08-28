@@ -12,6 +12,8 @@ namespace EyeTraining.Sessions.Unlocking
             _plan = plan ?? throw new ArgumentNullException(nameof(plan));
         }
 
+        public UnlockPlan Plan => _plan;
+
         public UnlockState GetState(int completedSessionCount)
         {
             if (completedSessionCount < 0)

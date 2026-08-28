@@ -9,6 +9,7 @@ namespace EyeTraining.Sessions.Scheduling
         public const string LandoltStandardId = "landolt.standard";
         public const string SaccadesNumberJourneyId = ExerciseIds.SaccadesNumberJourney;
         public const string VisualSearchShapeSearchId = ExerciseIds.VisualSearchShapeSearch;
+        public const string PeripheralEdgeSignalsId = ExerciseIds.PeripheralEdgeSignals;
 
         public static readonly ExerciseDefinition PreparationBasic = new ExerciseDefinition(
             PreparationBasicId,
@@ -45,5 +46,24 @@ namespace EyeTraining.Sessions.Scheduling
             TimeSpan.FromSeconds(30),
             false,
             true);
+
+        public static readonly ExerciseDefinition SaccadesNumberJourneyReturning = WithPriority(
+            SaccadesNumberJourney, ExercisePriority.Normal);
+        public static readonly ExerciseDefinition VisualSearchShapeSearchReturning = WithPriority(
+            VisualSearchShapeSearch, ExercisePriority.Normal);
+        public static readonly ExerciseDefinition PeripheralEdgeSignals = new ExerciseDefinition(
+            PeripheralEdgeSignalsId,
+            "Sygnały na obrzeżach",
+            ExerciseFamily.Peripheral,
+            ExercisePriority.Required,
+            null,
+            false,
+            true);
+        public static readonly ExerciseDefinition PeripheralEdgeSignalsReturning = WithPriority(
+            PeripheralEdgeSignals, ExercisePriority.Normal);
+
+        private static ExerciseDefinition WithPriority(ExerciseDefinition source, ExercisePriority priority) =>
+            new(source.Id, source.DisplayName, source.Family, priority, source.EstimatedDuration,
+                source.RequiresBreakAfter, source.CanAppearInMilestoneSession);
     }
 }

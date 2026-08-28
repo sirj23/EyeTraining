@@ -5,6 +5,7 @@ using EyeTraining.Sessions.Progression.Saccades;
 using EyeTraining.Sessions.Progression.VisualSearch;
 using EyeTraining.Sessions.Progression.Peripheral;
 using EyeTraining.Sessions.Rotation;
+using EyeTraining.Sessions.Rotation.Returning;
 using EyeTraining.Sessions.Unlocking;
 
 namespace EyeTraining.Sessions.History
@@ -136,5 +137,31 @@ namespace EyeTraining.Sessions.History
             }
             return new EdgeSignalsProgressionHistory(entries);
         }
+
+        public static ReturningExerciseHistory ToReturningExerciseHistory(TrainingHistorySnapshot snapshot)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            var lastSessions = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (ExerciseHistoryEntry entry in snapshot.Entries)
+            {
+                if (entry.CompletionStatus != ExerciseCompletionStatus.Completed
+                    || !IsReturningExercise(entry.ExerciseId)) continue;
+                counts.TryGetValue(entry.ExerciseId, out int count);
+                counts[entry.ExerciseId] = count + 1;
+                if (!lastSessions.TryGetValue(entry.ExerciseId, out int last)
+                    || entry.CompletedSessionNumber > last)
+                    lastSessions[entry.ExerciseId] = entry.CompletedSessionNumber;
+            }
+            var usages = new List<ReturningExerciseUsage>();
+            foreach (KeyValuePair<string, int> pair in counts)
+                usages.Add(new ReturningExerciseUsage(pair.Key, pair.Value, lastSessions[pair.Key]));
+            return new ReturningExerciseHistory(usages);
+        }
+
+        private static bool IsReturningExercise(string exerciseId) =>
+            string.Equals(exerciseId, ExerciseIds.SaccadesNumberJourney, StringComparison.Ordinal)
+            || string.Equals(exerciseId, ExerciseIds.VisualSearchShapeSearch, StringComparison.Ordinal)
+            || string.Equals(exerciseId, ExerciseIds.PeripheralEdgeSignals, StringComparison.Ordinal);
     }
 }

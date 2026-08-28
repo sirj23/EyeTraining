@@ -13,6 +13,7 @@ using EyeTraining.Sessions.Progression.Tracking;
 using EyeTraining.Sessions.Progression.Saccades;
 using EyeTraining.Sessions.Progression.VisualSearch;
 using EyeTraining.Sessions.Rotation;
+using EyeTraining.Sessions.Rotation.Returning;
 using EyeTraining.Sessions.Scheduling;
 using EyeTraining.Sessions.Unlocking;
 using EyeTraining.UI;
@@ -34,6 +35,9 @@ namespace EyeTraining.Sessions.Runtime
         [SerializeField] private SessionDebugMode debugMode;
         [Tooltip("Temporary fallback. Must be disabled before production.")]
         [SerializeField] private bool skipUnsupportedExercisesInDevelopment = true;
+        [Tooltip("Plans a normal session with the debug session number without persisting its results.")]
+        [SerializeField] private bool debugOverrideSessionNumber;
+        [SerializeField, Min(1)] private int debugSessionNumber = 1;
 
         private ITrainingHistoryRepository repository;
         private SessionScheduler scheduler;
@@ -50,6 +54,7 @@ namespace EyeTraining.Sessions.Runtime
         private bool debugNumberJourneyOnlyActive;
         private bool debugShapeSearchOnlyActive;
         private bool debugEdgeSignalsOnlyActive;
+        private bool preparedSessionUsesDebugNumber;
         private EdgeSignalsProgressionService edgeSignalsProgressionService;
 
         public SessionRuntimePhase Phase { get; private set; } = SessionRuntimePhase.Inactive;
@@ -91,12 +96,17 @@ namespace EyeTraining.Sessions.Runtime
                 DefaultNumberJourneyProgressionPlan.Create());
             shapeSearchProgressionService = new ShapeSearchProgressionService(
                 DefaultShapeSearchProgressionPlan.Create());
+            UnlockPlan unlockPlan = DefaultUnlockPlan.Create();
             scheduler = new SessionScheduler(
-                new UnlockService(DefaultUnlockPlan.Create()),
+                new UnlockService(unlockPlan),
                 new RotationService(new TrackingRotationCatalog()),
                 progressionService,
                 numberJourneyProgressionService,
                 shapeSearchProgressionService,
+                edgeSignalsProgressionService,
+                DefaultReturningExercisePolicies.CreateSelector(),
+                DefaultMajorUnlockPacePolicy.Create(),
+                new DiversitySlotCadencePolicy(),
                 trackingCatalog,
                 new ReferenceTrackingDurationEstimator(trackingCatalog),
                 new DefaultLandoltSchedulePolicy());
@@ -164,7 +174,9 @@ namespace EyeTraining.Sessions.Runtime
 
             if (HasPreparedSession
                 && CurrentPlan != null
-                && string.Equals(activeProfile?.Id, profile.Id, StringComparison.Ordinal))
+                && string.Equals(activeProfile?.Id, profile.Id, StringComparison.Ordinal)
+                && preparedSessionUsesDebugNumber == debugOverrideSessionNumber
+                && (!debugOverrideSessionNumber || CurrentSessionNumber == debugSessionNumber))
             {
                 activeProfile = profile;
                 return true;
@@ -177,14 +189,21 @@ namespace EyeTraining.Sessions.Runtime
 
             try
             {
-                int currentSessionNumber = snapshot.State.CompletedSessionCount + 1;
+                int currentSessionNumber = debugOverrideSessionNumber
+                    ? Math.Max(1, debugSessionNumber)
+                    : snapshot.State.CompletedSessionCount + 1;
+                int completedSessionCount = debugOverrideSessionNumber
+                    ? currentSessionNumber - 1
+                    : snapshot.State.CompletedSessionCount;
                 var request = new SessionScheduleRequest(
                     currentSessionNumber,
-                    snapshot.State.CompletedSessionCount,
+                    completedSessionCount,
                     TrainingHistoryMapper.ToRotationHistory(snapshot),
                     TrainingHistoryMapper.ToTrackingProgressionHistory(snapshot),
                     TrainingHistoryMapper.ToNumberJourneyProgressionHistory(snapshot),
-                    TrainingHistoryMapper.ToShapeSearchProgressionHistory(snapshot));
+                    TrainingHistoryMapper.ToShapeSearchProgressionHistory(snapshot),
+                    TrainingHistoryMapper.ToEdgeSignalsProgressionHistory(snapshot),
+                    TrainingHistoryMapper.ToReturningExerciseHistory(snapshot));
                 SessionScheduleResult result = scheduler.Schedule(request);
                 if (!result.IsSuccess)
                 {
@@ -193,6 +212,7 @@ namespace EyeTraining.Sessions.Runtime
                 }
 
                 activeProfile = profile;
+                preparedSessionUsesDebugNumber = debugOverrideSessionNumber;
                 PreparedScheduleResult = result;
                 CurrentSessionNumber = currentSessionNumber;
                 CurrentPlan = result.Plan;
@@ -204,7 +224,8 @@ namespace EyeTraining.Sessions.Runtime
                 Phase = SessionRuntimePhase.Prepared;
                 Debug.Log(
                     $"[SessionRuntime] Prepared session {CurrentSessionNumber}, exercises: "
-                    + CurrentPlan.Exercises.Count);
+                    + CurrentPlan.Exercises.Count
+                    + (preparedSessionUsesDebugNumber ? "; development override, persistence disabled" : string.Empty));
                 return true;
             }
             catch (Exception exception)
@@ -335,7 +356,8 @@ namespace EyeTraining.Sessions.Runtime
                 guidanceMode,
                 ExerciseIds.PeripheralEdgeSignals,
                 edgeSignalsController.DebugEdgeSignalsSeed,
-                edgeSignalsProgressionService.GetSettings(edgeSignalsController.DebugEdgeSignalsLevel));
+                edgeSignalsProgressionService.GetSettings(edgeSignalsController.DebugEdgeSignalsLevel),
+                true);
         }
 
         public void AbortSession()
@@ -421,6 +443,15 @@ namespace EyeTraining.Sessions.Runtime
                             StringComparison.Ordinal))
                     {
                         StartShapeSearch();
+                        return;
+                    }
+
+                    if (CurrentPlannedExercise.Definition.Family == ExerciseFamily.Peripheral
+                        && string.Equals(CurrentPlannedExercise.Definition.Id,
+                            SessionSchedulingDefinitions.PeripheralEdgeSignalsId,
+                            StringComparison.Ordinal))
+                    {
+                        StartEdgeSignals();
                         return;
                     }
 
@@ -528,6 +559,20 @@ namespace EyeTraining.Sessions.Runtime
                 settings);
         }
 
+        private void StartEdgeSignals()
+        {
+            if (CurrentPlannedExercise.Parameters is not EdgeSignalsLevelSettings settings)
+            {
+                Fail("Edge Signals has invalid progression parameters.");
+                trackingExerciseController.ShowSessionError("Nie udało się uruchomić ćwiczenia.");
+                return;
+            }
+            Phase = SessionRuntimePhase.RunningExercise;
+            Debug.Log("[SessionRuntime] Starting: " + CurrentPlannedExercise.Definition.Id);
+            edgeSignalsController.Begin(guidanceMode, CurrentPlannedExercise.Definition.Id,
+                CurrentSessionNumber, settings);
+        }
+
         private void HandlePreparationCompleted()
         {
             if (Phase == SessionRuntimePhase.Preparing)
@@ -576,7 +621,7 @@ namespace EyeTraining.Sessions.Runtime
                 result.CompletionStatus,
                 result.Feedback,
                 DateTimeOffset.Now);
-            PendingSnapshot = PendingSnapshot.WithEntry(entry);
+            RecordPendingEntry(entry);
             Phase = SessionRuntimePhase.WaitingForContinue;
         }
 
@@ -639,7 +684,7 @@ namespace EyeTraining.Sessions.Runtime
                 ExerciseFeedback.None,
                 DateTimeOffset.Now,
                 details);
-            PendingSnapshot = PendingSnapshot.WithEntry(entry);
+            RecordPendingEntry(entry);
             Phase = SessionRuntimePhase.WaitingForContinue;
         }
 
@@ -697,7 +742,7 @@ namespace EyeTraining.Sessions.Runtime
                 result.CompletionStatus,
                 ExerciseFeedback.None,
                 DateTimeOffset.Now);
-            PendingSnapshot = PendingSnapshot.WithEntry(entry);
+            RecordPendingEntry(entry);
             Phase = SessionRuntimePhase.WaitingForContinue;
         }
 
@@ -756,32 +801,47 @@ namespace EyeTraining.Sessions.Runtime
                 result.CompletionStatus,
                 ExerciseFeedback.None,
                 DateTimeOffset.Now);
-            PendingSnapshot = PendingSnapshot.WithEntry(entry);
+            RecordPendingEntry(entry);
             Phase = SessionRuntimePhase.WaitingForContinue;
         }
 
         private void HandleEdgeSignalsResult(EdgeSignalsExerciseResult result)
         {
             if (Phase != SessionRuntimePhase.RunningExercise
-                || currentStepResultReceived
-                || !debugEdgeSignalsOnlyActive)
+                || currentStepResultReceived)
             {
                 return;
             }
 
+            if (debugEdgeSignalsOnlyActive)
+            {
+                currentStepResultReceived = true;
+                Debug.Log($"[SessionRuntime] Development Edge Signals result: "
+                    + $"{result.CompletionStatus} / {result.DetectedCount}/{result.TrialCount}; not persisted.");
+                if (result.CompletionStatus == ExerciseCompletionStatus.Interrupted) AbortSession();
+                else Phase = SessionRuntimePhase.WaitingForContinue;
+                return;
+            }
+
+            if (CurrentPlannedExercise == null
+                || CurrentPlannedExercise.Definition.Family != ExerciseFamily.Peripheral
+                || !string.Equals(CurrentPlannedExercise.Definition.Id, result.ExerciseId, StringComparison.Ordinal))
+                return;
+
             currentStepResultReceived = true;
-            Debug.Log(
-                $"[SessionRuntime] Development Edge Signals result: "
-                + $"{result.CompletionStatus} / {result.DetectedCount}/{result.TrialCount}; "
-                + "not persisted.");
+            Debug.Log($"[SessionRuntime] Result: {result.ExerciseId} / {result.CompletionStatus} / "
+                + $"{result.DetectedCount}/{result.TrialCount}");
             if (result.CompletionStatus == ExerciseCompletionStatus.Interrupted)
             {
                 AbortSession();
+                return;
             }
-            else
-            {
-                Phase = SessionRuntimePhase.WaitingForContinue;
-            }
+
+            var entry = new ExerciseHistoryEntry(activeProfile.Id, result.ExerciseId,
+                CurrentSessionNumber, ((EdgeSignalsLevelSettings)CurrentPlannedExercise.Parameters).Level,
+                result.CompletionStatus, ExerciseFeedback.None, DateTimeOffset.Now);
+            RecordPendingEntry(entry);
+            Phase = SessionRuntimePhase.WaitingForContinue;
         }
 
         private void HandleContinueRequested()
@@ -843,6 +903,17 @@ namespace EyeTraining.Sessions.Runtime
         private void CompleteSession()
         {
             Phase = SessionRuntimePhase.Completing;
+            if (preparedSessionUsesDebugNumber)
+            {
+                Phase = SessionRuntimePhase.Completed;
+                Debug.Log(
+                    $"[SessionRuntime] Development session {CurrentSessionNumber} completed; "
+                    + "profile state and history were not saved.");
+                trackingExerciseController.ShowSessionCompleted();
+                PreparedSessionChanged?.Invoke();
+                return;
+            }
+
             DateTimeOffset completedAt = DateTimeOffset.Now;
             DateTimeOffset startDate = PendingSnapshot.State.TrainingStartDate
                 ?? pendingSessionStartDate;
@@ -878,6 +949,16 @@ namespace EyeTraining.Sessions.Runtime
             PreparedSessionChanged?.Invoke();
         }
 
+        private void RecordPendingEntry(ExerciseHistoryEntry entry)
+        {
+            if (preparedSessionUsesDebugNumber)
+            {
+                return;
+            }
+
+            PendingSnapshot = PendingSnapshot.WithEntry(entry);
+        }
+
         private bool Fail(string message)
         {
             Phase = SessionRuntimePhase.Error;
@@ -900,6 +981,7 @@ namespace EyeTraining.Sessions.Runtime
             debugNumberJourneyOnlyActive = false;
             debugShapeSearchOnlyActive = false;
             debugEdgeSignalsOnlyActive = false;
+            preparedSessionUsesDebugNumber = false;
         }
     }
 }

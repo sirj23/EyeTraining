@@ -98,7 +98,7 @@ namespace EyeTraining.Exercises.Peripheral
         }
 
         public void Begin(SessionGuidanceMode guidanceMode, string currentExerciseId, int seed,
-            EdgeSignalsLevelSettings levelSettings)
+            EdgeSignalsLevelSettings levelSettings, bool useDebugOverrides = false)
         {
             if (string.IsNullOrWhiteSpace(currentExerciseId))
                 throw new ArgumentException("Exercise ID cannot be empty.", nameof(currentExerciseId));
@@ -112,7 +112,7 @@ namespace EyeTraining.Exercises.Peripheral
             sequence = PeripheralStimulusSequence.Create(
                 seed,
                 settings,
-                debugFixedDirection,
+                useDebugOverrides && debugFixedDirection,
                 debugDirection);
             round = new EdgeSignalsRound(settings.TrialCount, settings.ResponseWindow);
             trackingExerciseScreen.SetActive(false);
